@@ -17,9 +17,7 @@ pub(crate) fn solveLevel(level: &Level) -> Vec<Strand>
     let result = dijkstra(
         &level.start, |node| makeSuccessors(node), |node| isGoalReached(node, &level.target));
     match result {
-        Some((nodes, _cost)) => {
-            nodes
-        },
+        Some((nodes, _cost)) => nodes,
         None => vec![]
     }
 }
@@ -27,7 +25,7 @@ pub(crate) fn solveLevel(level: &Level) -> Vec<Strand>
 fn makeSuccessors(solutionNode: &SolutionNode) -> Vec<NodeAndCost>
 {
     let mut successors = vec![];
-    let mut dfs = Dfs::new(&solutionNode.0, solutionNode.0.node_indices().into_iter().next().unwrap());
+    let mut dfs = Dfs::new(&solutionNode.0, solutionNode.0.node_indices().next().unwrap());
     while let Some(strandNode) = dfs.next(&solutionNode.0) {
         successors.extend(makeNextStatesForStrandNode(strandNode, solutionNode));
     }
@@ -86,4 +84,14 @@ fn makeStrandWithNewParent(node: NodeIndex, oldParent: NodeIndex, newParent: Nod
 fn isGoalReached(node: &SolutionNode, target: &SolutionNode) -> bool
 {
     node == target
+}
+
+#[allow(dead_code)]
+fn formatNeighbors(nodeIndex: NodeIndex, strand: &Strand) -> String
+{
+    let mut result = String::new();
+    for neighbor in strand.0.neighbors(nodeIndex) {
+        result.push_str(&format!("{:?}, ", neighbor));
+    }
+    result
 }
