@@ -2,25 +2,59 @@
 
 mod graph_types;
 mod graph_utils;
-mod levels;
+mod level_maker;
 mod level_solver;
 
+use crate::graph_types::Strand;
 use crate::graph_utils::printGraph;
-use crate::levels::{makeSequence1Strand1, makeSequence1Strand2};
+use crate::level_maker::{makeLevel, SequenceNumber, StrandNumber};
 use crate::level_solver::solveLevel;
 
-fn main() {
-    let level = makeSequence1Strand1();
-    let solution = solveLevel(&level);
-    println!("solution 1 found:");
-    for step in &solution {
-        printGraph(&step);
-    }
+use anyhow::{bail, Result};
+use clap::Parser;
 
-    let level = makeSequence1Strand2();
+
+fn main() -> Result<()>
+{
+    let args = Args::parse();
+    let level = makeLevel(SequenceNumber(args.sequence), StrandNumber(args.strand))?;
     let solution = solveLevel(&level);
-    println!("solution 2 found:");
-    for step in &solution {
+    printSolution(&solution)?;
+    Ok(())
+}
+
+#[derive(Parser)]
+struct Args {
+    /// Sequence number
+    #[clap(short, long)]
+    sequence: u8,
+
+    /// Strand number
+    #[clap(short = 't', long)]
+    strand: u8,
+}
+
+fn printSolution(solution: &Option<Vec<Strand>>) -> Result<()>
+{
+    match solution {
+        Some(solution) => {
+            match solution.len() {
+                0 => bail!("Solution was found, but has no steps."),
+                1 => bail!("Solution was found, but contains only 1 entry instead of at least 2 - start and end."),
+                _ => Ok(printValidSolution(solution))
+            }
+        },
+        None => bail!("No solution was found.")
+    }
+}
+
+fn printValidSolution(solution: &[Strand])
+{
+    let splicesCount = solution.len() - 1; // do not count the start state
+    println!("Solution was found in {} splice{}:",
+             splicesCount,
+             if splicesCount == 1 { "" } else { "s" });
+    for step in solution {
         printGraph(&step);
     }
 }

@@ -1,5 +1,5 @@
 use crate::graph_types::{Strand, StrandEdge};
-use crate::levels::Level;
+use crate::level_maker::Level;
 
 use itertools::Itertools as _;
 use pathfinding::directed::dijkstra::dijkstra;
@@ -12,13 +12,13 @@ type NodeAndCost = (SolutionNode, Cost);
 type Cost = u32;
 
 
-pub(crate) fn solveLevel(level: &Level) -> Vec<Strand>
+pub(crate) fn solveLevel(level: &Level) -> Option<Vec<Strand>>
 {
     let result = dijkstra(
         &level.start, |node| makeSuccessors(node), |node| isGoalReached(node, &level.target));
     match result {
-        Some((nodes, _cost)) => nodes,
-        None => vec![]
+        Some((nodes, _cost)) => Some(nodes),
+        None => None
     }
 }
 
@@ -54,7 +54,8 @@ fn findPotentialNewParents(strandNodeIndex: NodeIndex, parentIndex: NodeIndex, s
     let mut excludedIndices = vec![strandNodeIndex, parentIndex];
     excludedIndices.extend(findChildrenRecursively(strandNodeIndex, strand));
     nodeIndices = nodeIndices.into_iter().filter(|index| !excludedIndices.contains(index)).collect();
-    nodeIndices.into_iter().filter(|index| countChildren(*index, strand) < 2).collect()
+    nodeIndices = nodeIndices.into_iter().filter(|index| countChildren(*index, strand) < 2).collect();
+    nodeIndices
 }
 
 fn findChildrenRecursively(strandNodeIndex: NodeIndex, strand: &Strand) -> Vec<NodeIndex>
