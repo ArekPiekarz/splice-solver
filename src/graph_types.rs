@@ -1,11 +1,18 @@
-use petgraph::visit::{Data, GetAdjacencyMatrix, GraphProp, IntoEdgeReferences, NodeIndexable};
-use petgraph::visit::GraphBase;
-use petgraph::visit::IntoNodeIdentifiers;
-use petgraph::visit::IntoNodeReferences;
+use petgraph::{Direction, IntoWeightedEdge};
+use petgraph::visit::{
+    Data,
+    Dfs,
+    GetAdjacencyMatrix,
+    GraphBase,
+    GraphProp,
+    IntoEdgeReferences,
+    IntoNodeIdentifiers,
+    IntoNodeReferences,
+    NodeIndexable};
+use petgraph::stable_graph::NodeIndex;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
-use petgraph::IntoWeightedEdge;
-use petgraph::stable_graph::NodeIndex;
+
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Strand(pub StrandInnerType);
@@ -33,8 +40,35 @@ impl Eq for Strand {}
 impl PartialEq for Strand {
     fn eq(&self, other: &Self) -> bool
     {
-        self.0.adjacency_matrix() == other.0.adjacency_matrix()
+        // We assume the indices of the nodes do not matter, what matters is how they are connected,
+        // meaning how many incoming and outgoing neighbors each node has.
+        let mut selfDfs = Dfs::new(&self.0, NodeIndex::new(0));
+        let mut otherDfs = Dfs::new(&other.0, NodeIndex::new(0));
+        while let Some(selfNodeIndex) = selfDfs.next(&self.0) {
+            let otherNodeIndex = match otherDfs.next(&other.0) {
+                Some(index) => index,
+                None => return false
+            };
+            if !isNeighborsCountTheSame(self, selfNodeIndex, other, otherNodeIndex, Direction::Incoming)
+                || !isNeighborsCountTheSame(self, selfNodeIndex, other, otherNodeIndex, Direction::Outgoing) {
+                return false;
+            }
+        }
+        otherDfs.next(&other.0) == None
     }
+}
+
+fn isNeighborsCountTheSame(
+    leftStrand: &Strand,
+    leftNodeIndex: NodeIndex,
+    rightStrand: &Strand,
+    rightNodeIndex: NodeIndex,
+    direction: Direction)
+    -> bool
+{
+    let leftNeighborsCount = leftStrand.0.neighbors_directed(leftNodeIndex, direction).count();
+    let rightNeighborsCount = rightStrand.0.neighbors_directed(rightNodeIndex, direction).count();
+    leftNeighborsCount == rightNeighborsCount
 }
 
 impl Hash for Strand
