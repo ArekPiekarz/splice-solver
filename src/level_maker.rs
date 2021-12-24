@@ -29,6 +29,10 @@ fn makeStrandInSequence1(strand: StrandNumber) -> Result<Level>
             start:  StrandInfo{numberOfNodes: 5, edges: vec![(0,1), (1,2), (2,3), (1,4)]},
             target: StrandInfo{numberOfNodes: 5, edges: vec![(0,1), (1,2), (0,3), (3,4)]},
             maxMoves: 1},
+        3 => LevelInfo{
+            start:  StrandInfo{numberOfNodes: 11, edges: vec![(0,1), (1,2), (1,3), (3,4), (3,5), (0,6), (6,7), (6,8), (8,9), (8,10)]},
+            target: StrandInfo{numberOfNodes: 11, edges: vec![(0,1), (1,2), (2,3), (3,4), (3,5), (0,6), (6,7), (7,8), (8,9), (8,10)]},
+            maxMoves: 2},
         _ => bail!("Unsupported strand number: {}", strand.0)
     };
     Ok(makeLevelFrom(levelInfo))
