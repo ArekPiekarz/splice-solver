@@ -1,10 +1,7 @@
-use crate::graph_types::{Strand, StrandEdge};
 use crate::level_maker::Level;
+use crate::strand::{NodeId, Strand};
 
-use itertools::Itertools as _;
 use pathfinding::directed::dijkstra::dijkstra;
-use petgraph::Direction;
-use petgraph::stable_graph::NodeIndex;
 use petgraph::visit::Dfs;
 
 type SolutionNode = Strand;
@@ -25,74 +22,71 @@ pub(crate) fn solveLevel(level: &Level) -> Option<Vec<Strand>>
 fn makeSuccessors(solutionNode: &SolutionNode) -> Vec<NodeAndCost>
 {
     let mut successors = vec![];
-    let mut dfs = Dfs::new(&solutionNode.0, solutionNode.0.node_indices().next().unwrap());
-    while let Some(strandNode) = dfs.next(&solutionNode.0) {
+    let mut dfs = Dfs::new(&solutionNode, SolutionNode::root());
+    while let Some(strandNode) = dfs.next(&solutionNode) {
         successors.extend(makeNextStatesForStrandNode(strandNode, solutionNode));
     }
     successors.into_iter().map(|node| (node, 1)).collect()
 }
 
-fn makeNextStatesForStrandNode(strandNodeIndex: NodeIndex, strand: &Strand) -> Vec<Strand>
+fn makeNextStatesForStrandNode(nodeId: NodeId, strand: &Strand) -> Vec<Strand>
 {
-    let mut parents = strand.0.neighbors_directed(strandNodeIndex, Direction::Incoming);
-    let parent = match parents.next() {
+    let parent = match strand.parent(nodeId) {
         Some(parent) => parent,
         None => return vec![]
     };
-    let newParents = findPotentialNewParents(strandNodeIndex, parent, strand);
+    let newParents = findPotentialNewParents(nodeId, parent, strand);
 
     let mut result = vec![];
     for newParent in newParents {
-        result.push(makeStrandWithNewParent(strandNodeIndex, parent, newParent, strand));
+        result.push(makeStrandWithNewParent(nodeId, newParent, strand));
+    }
+    if strand.childCount(parent) == 2 {
+        result.push(makeStrandWithSwappedChildren(parent, strand));
     }
     result
 }
 
-fn findPotentialNewParents(strandNodeIndex: NodeIndex, parentIndex: NodeIndex, strand: &Strand) -> Vec<NodeIndex>
+fn findPotentialNewParents(nodeId: NodeId, parentId: NodeId, strand: &Strand) -> Vec<NodeId>
 {
-    let mut nodeIndices = strand.0.node_indices().collect_vec();
-    let mut excludedIndices = vec![strandNodeIndex, parentIndex];
-    excludedIndices.extend(findChildrenRecursively(strandNodeIndex, strand));
+    let mut nodeIndices = strand.collectNodeIds();
+    let mut excludedIndices = vec![nodeId];
+    excludedIndices.extend(findChildrenRecursively(nodeId, strand));
+    if strand.childCount(parentId) == 1 {
+        excludedIndices.push(parentId);
+    }
     nodeIndices = nodeIndices.into_iter().filter(|index| !excludedIndices.contains(index)).collect();
-    nodeIndices = nodeIndices.into_iter().filter(|index| countChildren(*index, strand) < 2).collect();
+    nodeIndices = nodeIndices.into_iter().filter(|index| strand.childCount(*index) < 2).collect();
     nodeIndices
 }
 
-fn findChildrenRecursively(strandNodeIndex: NodeIndex, strand: &Strand) -> Vec<NodeIndex>
+fn findChildrenRecursively(strandNodeIndex: NodeId, strand: &Strand) -> Vec<NodeId>
 {
     let mut result = vec![];
-    let mut dfs = Dfs::new(&strand.0, strandNodeIndex);
-    while let Some(childIndex) = dfs.next(&strand.0) {
-        result.push(childIndex);
+    let mut dfs = Dfs::new(&strand, strandNodeIndex);
+    while let Some(childIndex) = dfs.next(&strand) {
+        if childIndex != strandNodeIndex {
+            result.push(childIndex);
+        }
     }
     result
 }
 
-fn countChildren(index: NodeIndex, strand: &Strand) -> usize
-{
-    strand.0.neighbors_directed(index, Direction::Outgoing).count()
-}
-
-fn makeStrandWithNewParent(node: NodeIndex, oldParent: NodeIndex, newParent: NodeIndex, strand: &Strand) -> Strand
+fn makeStrandWithNewParent(nodeId: NodeId, newParentId: NodeId, strand: &Strand) -> Strand
 {
     let mut newStrand = strand.clone();
-    let edge = newStrand.0.find_edge(oldParent, node).unwrap();
-    newStrand.0.remove_edge(edge);
-    newStrand.0.add_edge(newParent, node, StrandEdge{});
+    newStrand.changeParent(nodeId, newParentId);
+    newStrand
+}
+
+fn makeStrandWithSwappedChildren(parentId: NodeId, strand: &Strand) -> Strand
+{
+    let mut newStrand = strand.clone();
+    newStrand.swapChildren(parentId);
     newStrand
 }
 
 fn isGoalReached(node: &SolutionNode, target: &SolutionNode) -> bool
 {
     node == target
-}
-
-#[allow(dead_code)]
-fn formatNeighbors(nodeIndex: NodeIndex, strand: &Strand) -> String
-{
-    let mut result = String::new();
-    for neighbor in strand.0.neighbors(nodeIndex) {
-        result.push_str(&format!("{:?}, ", neighbor));
-    }
-    result
 }

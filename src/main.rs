@@ -1,14 +1,14 @@
 #![allow(non_snake_case)]
 
-mod graph_types;
 mod graph_utils;
 mod level_maker;
 mod level_solver;
+mod strand;
 
-use crate::graph_types::Strand;
 use crate::graph_utils::printGraph;
 use crate::level_maker::{makeLevel, SequenceNumber, StrandNumber};
 use crate::level_solver::solveLevel;
+use crate::strand::Strand;
 
 use anyhow::{bail, Result};
 use clap::Parser;
