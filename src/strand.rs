@@ -178,7 +178,9 @@ impl ChildNodesIterator
 {
     fn new(nodes: &[NodeId]) -> Self
     {
-        Self{nodes: nodes.into(), nextNodeId: 0}
+        let mut nodes = nodes.to_vec();
+        nodes.reverse();
+        Self{nodes, nextNodeId: 0}
     }
 }
 
