@@ -1,5 +1,6 @@
 use crate::strand::Strand;
 
+
 pub(crate) fn printGraph(graph: &Strand)
 {
     println!("digraph {{");

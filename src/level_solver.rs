@@ -1,36 +1,41 @@
-use crate::level_maker::Level;
+use crate::level_maker::{Level, SpliceCount};
 use crate::strand::{NodeId, Strand};
 
 use pathfinding::directed::dijkstra::dijkstra;
 use petgraph::visit::Dfs;
 
-type SolutionNode = Strand;
-type NodeAndCost = (SolutionNode, Cost);
-type Cost = u32;
 
+const START_SPLICE_COUNT: SpliceCount = 0;
 
-pub(crate) fn solveLevel(level: &Level) -> Option<Vec<Strand>>
+pub(crate) fn solveLevel(level: Level) -> Option<Vec<SolutionStep>>
 {
+    let startStep = SolutionStep::new(level.start, START_SPLICE_COUNT);
     let result = dijkstra(
-        &level.start, |node| makeSuccessors(node), |node| isGoalReached(node, &level.target));
+        &startStep, |step| makeSuccessors(step, level.maxSplices), |step| isGoalReached(step, &level.target));
     match result {
         Some((nodes, _cost)) => Some(nodes),
         None => None
     }
 }
 
-fn makeSuccessors(solutionNode: &SolutionNode) -> Vec<NodeAndCost>
+fn makeSuccessors(solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<StepAndCost>
 {
+    if solutionStep.spliceCount >= maxSplices {
+        return vec![];
+    }
+
     let mut successors = vec![];
-    let mut dfs = Dfs::new(&solutionNode, SolutionNode::root());
-    while let Some(strandNode) = dfs.next(&solutionNode) {
-        successors.extend(makeNextStatesForStrandNode(strandNode, solutionNode));
+    let strand = &solutionStep.strand;
+    let mut dfs = Dfs::new(strand, Strand::root());
+    while let Some(strandNode) = dfs.next(strand) {
+        successors.extend(makeNextStatesForStrandNode(strandNode, solutionStep));
     }
     successors.into_iter().map(|node| (node, 1)).collect()
 }
 
-fn makeNextStatesForStrandNode(nodeId: NodeId, strand: &Strand) -> Vec<Strand>
+fn makeNextStatesForStrandNode(nodeId: NodeId, solutionStep: &SolutionStep) -> Vec<SolutionStep>
 {
+    let strand = &solutionStep.strand;
     let parent = match strand.parent(nodeId) {
         Some(parent) => parent,
         None => return vec![]
@@ -38,11 +43,12 @@ fn makeNextStatesForStrandNode(nodeId: NodeId, strand: &Strand) -> Vec<Strand>
     let newParents = findPotentialNewParents(nodeId, parent, strand);
 
     let mut result = vec![];
+    let newSpliceCount = solutionStep.spliceCount + 1;
     for newParent in newParents {
-        result.push(makeStrandWithNewParent(nodeId, newParent, strand));
+        result.push(SolutionStep::new(makeStrandWithNewParent(nodeId, newParent, strand), newSpliceCount));
     }
     if strand.childCount(parent) == 2 {
-        result.push(makeStrandWithSwappedChildren(parent, strand));
+        result.push(SolutionStep::new(makeStrandWithSwappedChildren(parent, strand), newSpliceCount));
     }
     result
 }
@@ -60,13 +66,13 @@ fn findPotentialNewParents(nodeId: NodeId, parentId: NodeId, strand: &Strand) ->
     nodeIndices
 }
 
-fn findChildrenRecursively(strandNodeIndex: NodeId, strand: &Strand) -> Vec<NodeId>
+fn findChildrenRecursively(nodeId: NodeId, strand: &Strand) -> Vec<NodeId>
 {
     let mut result = vec![];
-    let mut dfs = Dfs::new(&strand, strandNodeIndex);
-    while let Some(childIndex) = dfs.next(&strand) {
-        if childIndex != strandNodeIndex {
-            result.push(childIndex);
+    let mut dfs = Dfs::new(&strand, nodeId);
+    while let Some(childId) = dfs.next(&strand) {
+        if childId != nodeId {
+            result.push(childId);
         }
     }
     result
@@ -86,7 +92,25 @@ fn makeStrandWithSwappedChildren(parentId: NodeId, strand: &Strand) -> Strand
     newStrand
 }
 
-fn isGoalReached(node: &SolutionNode, target: &SolutionNode) -> bool
+fn isGoalReached(node: &SolutionStep, target: &Strand) -> bool
 {
-    node == target
+    node.strand == *target
 }
+
+#[derive(Eq, PartialEq, Clone, Hash)]
+pub(crate) struct SolutionStep
+{
+    pub strand: Strand,
+    spliceCount: SpliceCount
+}
+
+impl SolutionStep
+{
+    fn new(strand: Strand, spliceCount: SpliceCount) -> Self
+    {
+        Self{strand, spliceCount}
+    }
+}
+
+type StepAndCost = (SolutionStep, Cost);
+type Cost = u8;

@@ -7,8 +7,7 @@ mod strand;
 
 use crate::graph_utils::printGraph;
 use crate::level_maker::{makeLevel, SequenceNumber, StrandNumber};
-use crate::level_solver::solveLevel;
-use crate::strand::Strand;
+use crate::level_solver::{SolutionStep, solveLevel};
 
 use anyhow::{bail, Result};
 use clap::Parser;
@@ -18,7 +17,7 @@ fn main() -> Result<()>
 {
     let args = Args::parse();
     let level = makeLevel(SequenceNumber(args.sequence), StrandNumber(args.strand))?;
-    let solution = solveLevel(&level);
+    let solution = solveLevel(level);
     printSolution(&solution)?;
     Ok(())
 }
@@ -34,7 +33,7 @@ struct Args {
     strand: u8,
 }
 
-fn printSolution(solution: &Option<Vec<Strand>>) -> Result<()>
+fn printSolution(solution: &Option<Vec<SolutionStep>>) -> Result<()>
 {
     match solution {
         Some(solution) => {
@@ -48,13 +47,13 @@ fn printSolution(solution: &Option<Vec<Strand>>) -> Result<()>
     }
 }
 
-fn printValidSolution(solution: &[Strand])
+fn printValidSolution(solution: &[SolutionStep])
 {
     let splicesCount = solution.len() - 1; // do not count the start state
     println!("Solution was found in {} splice{}:",
              splicesCount,
              if splicesCount == 1 { "" } else { "s" });
     for step in solution {
-        printGraph(&step);
+        printGraph(&step.strand);
     }
 }
