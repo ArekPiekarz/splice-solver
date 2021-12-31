@@ -97,7 +97,7 @@ fn isGoalReached(node: &SolutionStep, target: &Strand) -> bool
     node.strand == *target
 }
 
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub(crate) struct SolutionStep
 {
     pub strand: Strand,

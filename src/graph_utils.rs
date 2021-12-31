@@ -1,11 +1,13 @@
 use crate::strand::Strand;
 
 
-pub(crate) fn printGraph(graph: &Strand)
+pub(crate) fn formatDotGraph(graph: &Strand) -> String
 {
-    println!("digraph {{");
+    let mut output = String::new();
+    output.push_str("digraph {\n");
     for edge in graph.collectEdges() {
-        println!("    {} -> {}", edge.0, edge.1);
+        output.push_str(&format!("    {} -> {}\n", edge.0, edge.1));
     }
-    println!("}}");
+    output.push_str("}");
+    output
 }
