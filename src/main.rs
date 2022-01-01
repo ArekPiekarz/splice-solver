@@ -24,7 +24,8 @@ fn main() -> Result<()>
 }
 
 #[derive(Parser)]
-struct Args {
+struct Args
+{
     /// Sequence number
     #[clap(short, long)]
     sequence: u8,

@@ -1,11 +1,14 @@
 use crate::graph_utils::formatDotGraph;
-use crate::level_solver::SolutionStep;
+use crate::level_solver::{SolutionStep, Splice};
+use crate::strand::Strand;
 
 use anyhow::{bail, Context, Result};
+use gtk::gdk_pixbuf::Pixbuf;
 use gtk::glib;
 use gtk::prelude::{CellLayoutExt, GtkWindowExt, ToValue, TreeViewExt, WidgetExt};
 use relm4::{send, AppUpdate, Model, RelmApp, Sender, Widgets};
 use std::fs::write;
+use std::process::Command;
 use tempfile::{NamedTempFile, tempdir};
 
 
@@ -29,38 +32,66 @@ pub(crate) fn showSolution(solutionOpt: Option<Vec<SolutionStep>>) -> Result<()>
 
 fn showValidSolution(solution: Vec<SolutionStep>) -> Result<()>
 {
-    let pixbufs = makeStrandPixbufs(&solution)?;
-    let model = AppModel{pixbufs, activeStep: 0};
+    let solutionStepsVisuals = makeSolutionStepsVisuals(&solution)?;
+    let model = AppModel{solutionSteps: solutionStepsVisuals, activeStep: 0};
     let relm = RelmApp::new(model);
     relm.run();
     Ok(())
 }
 
-fn makeStrandPixbufs(solution: &[SolutionStep]) -> Result<Vec<gtk::gdk_pixbuf::Pixbuf>>
+fn makeSolutionStepsVisuals(solution: &[SolutionStep]) -> Result<Vec<SolutionStepVisual>>
 {
     let mut output = vec![];
     for solutionStep in solution {
-        let dotGraph = formatDotGraph(&solutionStep.strand);
-        let tempDir = tempdir()?;
-        let dotGraphFile = NamedTempFile::new_in(&tempDir.path())?;
-        let dotGraphFilePathStr = dotGraphFile.path().to_str().context("None")?;
-        write(dotGraphFile.path(), dotGraph)?;
-
-        let mut svgFilePath = tempDir.path().to_owned();
-        svgFilePath.push("output.svg");
-        let dotCommandOutput = std::process::Command::new("dot").args(["-Tsvg", dotGraphFilePathStr]).output()?;
-        write(&svgFilePath, dotCommandOutput.stdout)?;
-
-        let pixbuf = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&svgFilePath, 1920, 1080, PRESERVE_ASPECT_RATIO)?;
-        output.push(pixbuf);
+        let description = makeSolutionStepDescription(&solutionStep.lastSplice);
+        let pixbuf = makeStrandPixbuf(&solutionStep.strand)?;
+        output.push(SolutionStepVisual{description, pixbuf});
     }
     Ok(output)
 }
 
+fn makeSolutionStepDescription(spliceOpt: &Option<Splice>) -> String
+{
+    match spliceOpt {
+        Some(splice) => {
+            match splice {
+                Splice::ChangeParent{node, oldParent, newParent} => {
+                    format!("Change parent of node {} from {} to {}", node, oldParent, newParent)
+                },
+                Splice::SwapChildren{parent} => {
+                    format!("Swap children of parent node {}", parent)
+                }
+            }
+        },
+        None => format!("Start")
+    }
+}
+
+fn makeStrandPixbuf(strand: &Strand) -> Result<Pixbuf>
+{
+    let dotGraph = formatDotGraph(strand);
+    let tempDir = tempdir()?;
+    let dotGraphFile = NamedTempFile::new_in(&tempDir.path())?;
+    let dotGraphFilePathStr = dotGraphFile.path().to_str().context("None")?;
+    write(dotGraphFile.path(), dotGraph)?;
+
+    let mut svgFilePath = tempDir.path().to_owned();
+    svgFilePath.push("output.svg");
+    let dotCommandOutput = Command::new("dot").args(["-Tsvg", dotGraphFilePathStr]).output()?;
+    write(&svgFilePath, dotCommandOutput.stdout)?;
+    Ok(Pixbuf::from_file_at_scale(&svgFilePath, 1920, 1080, PRESERVE_ASPECT_RATIO)?)
+}
+
 struct AppModel
 {
-    pixbufs: Vec<gtk::gdk_pixbuf::Pixbuf>,
+    solutionSteps: Vec<SolutionStepVisual>,
     activeStep: usize
+}
+
+struct SolutionStepVisual
+{
+    description: String,
+    pixbuf: Pixbuf
 }
 
 enum Event
@@ -106,8 +137,8 @@ impl Widgets<AppModel, ()> for AppWidgets
     {
         let solutionStore = gtk::ListStore::new(&[glib::Type::STRING]);
         let column = 0;
-        for i in 0..model.pixbufs.len() {
-            solutionStore.set_value(&solutionStore.append(), column, &format!("Step {}", i+1).to_value());
+        for step in &model.solutionSteps {
+            solutionStore.set_value(&solutionStore.append(), column, &step.description.to_value());
         }
     }
 
@@ -116,7 +147,7 @@ impl Widgets<AppModel, ()> for AppWidgets
             set_default_width: 900,
             set_default_height: 700,
             set_child: paned = Some(&gtk::Paned) {
-                set_position: 200,
+                set_position: 240,
                 set_start_child = &gtk::ScrolledWindow {
                     set_hexpand: true,
                     set_vexpand: true,
@@ -126,7 +157,7 @@ impl Widgets<AppModel, ()> for AppWidgets
                         }
                     }
                 },
-                set_end_child = &gtk::Image::from_pixbuf(Some(&model.pixbufs[model.activeStep])) {}
+                set_end_child = &gtk::Image::from_pixbuf(Some(&model.solutionSteps[model.activeStep].pixbuf)) {}
             }
         }
     }
@@ -146,6 +177,6 @@ impl Widgets<AppModel, ()> for AppWidgets
 
     fn manual_view(&mut self, model: &AppModel, _sender: Sender<AppMsg>)
     {
-        self.paned.set_end_child(&gtk::Image::from_pixbuf(Some(&model.pixbufs[model.activeStep])));
+        self.paned.set_end_child(&gtk::Image::from_pixbuf(Some(&model.solutionSteps[model.activeStep].pixbuf)));
     }
 }

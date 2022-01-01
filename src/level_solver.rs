@@ -5,11 +5,12 @@ use pathfinding::directed::dijkstra::dijkstra;
 use petgraph::visit::Dfs;
 
 
+const NO_LAST_SPLICE: Option<Splice> = None;
 const START_SPLICE_COUNT: SpliceCount = 0;
 
 pub(crate) fn solveLevel(level: Level) -> Option<Vec<SolutionStep>>
 {
-    let startStep = SolutionStep::new(level.start, START_SPLICE_COUNT);
+    let startStep = SolutionStep::new(level.start, NO_LAST_SPLICE, START_SPLICE_COUNT);
     let result = dijkstra(
         &startStep, |step| makeSuccessors(step, level.maxSplices), |step| isGoalReached(step, &level.target));
     match result {
@@ -45,10 +46,16 @@ fn makeNextStatesForStrandNode(nodeId: NodeId, solutionStep: &SolutionStep) -> V
     let mut result = vec![];
     let newSpliceCount = solutionStep.spliceCount + 1;
     for newParent in newParents {
-        result.push(SolutionStep::new(makeStrandWithNewParent(nodeId, newParent, strand), newSpliceCount));
+        result.push(SolutionStep::new(
+            makeStrandWithNewParent(nodeId, newParent, strand),
+            Some(Splice::ChangeParent{node: nodeId, oldParent: parent, newParent}),
+            newSpliceCount));
     }
     if strand.childCount(parent) == 2 {
-        result.push(SolutionStep::new(makeStrandWithSwappedChildren(parent, strand), newSpliceCount));
+        result.push(SolutionStep::new(
+            makeStrandWithSwappedChildren(parent, strand),
+            Some(Splice::SwapChildren{parent}),
+            newSpliceCount));
     }
     result
 }
@@ -97,20 +104,28 @@ fn isGoalReached(node: &SolutionStep, target: &Strand) -> bool
     node.strand == *target
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub(crate) struct SolutionStep
 {
     pub strand: Strand,
+    pub lastSplice: Option<Splice>,
     spliceCount: SpliceCount
 }
 
 impl SolutionStep
 {
-    fn new(strand: Strand, spliceCount: SpliceCount) -> Self
+    fn new(strand: Strand, lastSplice: Option<Splice>, spliceCount: SpliceCount) -> Self
     {
-        Self{strand, spliceCount}
+        Self{strand, lastSplice, spliceCount}
     }
 }
 
 type StepAndCost = (SolutionStep, Cost);
 type Cost = u8;
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub(crate) enum Splice
+{
+    ChangeParent{node: NodeId, oldParent: NodeId, newParent: NodeId},
+    SwapChildren{parent: NodeId}
+}
