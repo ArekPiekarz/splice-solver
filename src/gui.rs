@@ -1,21 +1,36 @@
 use crate::graph_utils::formatDotGraph;
-use crate::level_solver::{SolutionStep, Splice};
+use crate::level_maker::{makeLevel, SequenceNumber, StrandNumber};
+use crate::level_solver::{solveLevel, SolutionStep, Splice};
 use crate::strand::Strand;
 
 use anyhow::{bail, Context, Result};
 use gtk::gdk_pixbuf::Pixbuf;
 use gtk::glib;
-use gtk::prelude::{CellLayoutExt, GtkWindowExt, ToValue, TreeViewExt, WidgetExt};
+use gtk::prelude::{BoxExt, CellLayoutExt, GridExt, GtkWindowExt, ToValue, TreeModelExt, TreeViewExt, WidgetExt};
 use relm4::{send, AppUpdate, Model, RelmApp, Sender, Widgets};
 use std::fs::write;
 use std::process::Command;
 use tempfile::{NamedTempFile, tempdir};
 
 
+const CONTINUE_APP: bool = true;
 const EXPAND_IN_LAYOUT : bool = true;
 const PRESERVE_ASPECT_RATIO: bool = true;
+const SPACING_I32: i32 = 5;
+const SPACING_U32: u32 = 5;
+const ZEROTH_COLUMN_I32: i32 = 0;
+const ZEROTH_COLUMN_U32: u32 = 0;
 
-pub(crate) fn showSolution(solutionOpt: Option<Vec<SolutionStep>>) -> Result<()>
+pub(crate) fn makeGui() -> Result<()>
+{
+    gtk::init()?;
+    let model = AppModel::new();
+    let relm = RelmApp::new(model);
+    relm.run();
+    Ok(())
+}
+
+fn makeSolutionVisuals(solutionOpt: Option<Vec<SolutionStep>>) -> Result<Vec<SolutionStepVisual>>
 {
     match solutionOpt {
         Some(solution) => {
@@ -23,23 +38,14 @@ pub(crate) fn showSolution(solutionOpt: Option<Vec<SolutionStep>>) -> Result<()>
                 0 => bail!("Solution was found, but has no steps."),
                 1 => bail!("Solution was found, but contains only 1 entry instead of at least 2 - start and end.\
                             As if the starting state was already solved."),
-                _ => Ok(showValidSolution(solution)?)
+                _ => makeValidSolutionVisuals(&solution)
             }
         },
         None => bail!("No solution was found.")
     }
 }
 
-fn showValidSolution(solution: Vec<SolutionStep>) -> Result<()>
-{
-    let solutionStepsVisuals = makeSolutionStepsVisuals(&solution)?;
-    let model = AppModel{solutionSteps: solutionStepsVisuals, activeStep: 0};
-    let relm = RelmApp::new(model);
-    relm.run();
-    Ok(())
-}
-
-fn makeSolutionStepsVisuals(solution: &[SolutionStep]) -> Result<Vec<SolutionStepVisual>>
+fn makeValidSolutionVisuals(solution: &[SolutionStep]) -> Result<Vec<SolutionStepVisual>>
 {
     let mut output = vec![];
     for solutionStep in solution {
@@ -85,21 +91,57 @@ fn makeStrandPixbuf(strand: &Strand) -> Result<Pixbuf>
 struct AppModel
 {
     solutionSteps: Vec<SolutionStepVisual>,
-    activeStep: usize
+    activeStep: usize,
+    solutionStore: gtk::ListStore,
 }
 
+#[derive(Debug)]
 struct SolutionStepVisual
 {
     description: String,
-    pixbuf: Pixbuf
+    pixbuf: Pixbuf,
 }
 
 enum Event
 {
-    SelectionChanged(gtk::TreeSelection)
+    SelectionChanged(gtk::TreeSelection),
+    StrandNumberChanged(i32),
 }
 
 type AppComponents = ();
+
+impl AppModel
+{
+    fn new() -> Self
+    {
+        let mut newSelf = Self{
+            solutionSteps: vec![], activeStep: 0, solutionStore: gtk::ListStore::new(&[glib::Type::STRING])};
+        newSelf.onStrandNumberChanged(1);
+        newSelf
+    }
+
+    fn onSelectionChanged(&mut self, selection: &gtk::TreeSelection)
+    {
+        let (rows, _model) = selection.selected_rows();
+        if rows.is_empty() {
+            return;
+        }
+        self.activeStep = toRowIndex(&rows[0]);
+    }
+
+    fn onStrandNumberChanged(&mut self, value: i32)
+    {
+        let level = makeLevel(SequenceNumber(1), StrandNumber(value.try_into().unwrap())).unwrap();
+        let solution = solveLevel(level);
+        let solutionVisuals = makeSolutionVisuals(solution).unwrap();
+        self.solutionSteps = solutionVisuals;
+        self.activeStep = 0;
+        self.solutionStore.clear();
+        for step in &self.solutionSteps {
+            self.solutionStore.set_value(&self.solutionStore.append(), ZEROTH_COLUMN_U32, &step.description.to_value());
+        }
+    }
+}
 
 impl Model for AppModel
 {
@@ -113,12 +155,10 @@ impl AppUpdate for AppModel
     fn update(&mut self, event: Event, _components: &AppComponents, _sender: Sender<Event>) -> bool
     {
         match event {
-            Event::SelectionChanged(selection) => {
-                let (rows, _model) = selection.selected_rows();
-                self.activeStep = toRowIndex(&rows[0]);
-            }
+            Event::SelectionChanged(selection) => self.onSelectionChanged(&selection),
+            Event::StrandNumberChanged(value) => self.onStrandNumberChanged(value)
         };
-        true
+        CONTINUE_APP
     }
 }
 
@@ -130,53 +170,79 @@ pub fn toRowIndex(rowPath: &gtk::TreePath) -> RowIndex
 
 type RowIndex = usize;
 
-#[relm4_macros::widget]
+struct AppWidgets
+{
+    appWindow: gtk::ApplicationWindow,
+    paned: gtk::Paned,
+    listView: gtk::TreeView,
+}
+
 impl Widgets<AppModel, ()> for AppWidgets
 {
-    fn pre_init()
+    type Root = gtk::ApplicationWindow;
+
+    fn init_view(model: &AppModel, _parent_widgets: &(), sender: Sender<Event>) -> Self
     {
-        let solutionStore = gtk::ListStore::new(&[glib::Type::STRING]);
-        let column = 0;
-        for step in &model.solutionSteps {
-            solutionStore.set_value(&solutionStore.append(), column, &step.description.to_value());
-        }
-    }
+        let sequenceSpinButton = gtk::SpinButton::with_range(1.0, 1.0, 1.0);
+        sequenceSpinButton.set_can_focus(false);
+        let strandSpinButton = gtk::SpinButton::with_range(1.0, 7.0, 1.0);
+        strandSpinButton.set_can_focus(false);
+        let sender2 = sender.clone();
+        strandSpinButton.connect_value_changed(move |spinButton| {
+            send!(sender2, Event::StrandNumberChanged(spinButton.value_as_int()));
+        });
 
-    view! {
-        gtk::ApplicationWindow {
-            set_default_width: 900,
-            set_default_height: 700,
-            set_child: paned = Some(&gtk::Paned) {
-                set_position: 240,
-                set_start_child = &gtk::ScrolledWindow {
-                    set_hexpand: true,
-                    set_vexpand: true,
-                    set_child: listView = Some(&gtk::TreeView::with_model(&solutionStore)) {
-                        append_column = &gtk::TreeViewColumn::new() {
-                            set_title: "Solution steps"
-                        }
-                    }
-                },
-                set_end_child = &gtk::Image::from_pixbuf(Some(&model.solutionSteps[model.activeStep].pixbuf)) {}
-            }
-        }
-    }
+        let parametersGrid = gtk::Grid::default();
+        parametersGrid.set_row_spacing(SPACING_U32);
+        parametersGrid.set_column_spacing(SPACING_U32);
+        parametersGrid.attach(&gtk::Label::new(Some("Sequence")), 0, 0, 1, 1);
+        parametersGrid.attach(&sequenceSpinButton, 1, 0, 1, 1);
+        parametersGrid.attach(&gtk::Label::new(Some("Strand")), 0, 1, 1, 1);
+        parametersGrid.attach(&strandSpinButton, 1, 1, 1, 1);
 
-    fn post_init()
-    {
-        let renderer = gtk::CellRendererText::new();
-        let index = 0;
-        let column = listView.column(index).unwrap();
-        column.pack_start(&renderer, EXPAND_IN_LAYOUT);
-        column.add_attribute(&renderer, "text", index);
-        column.set_resizable(true);
-
+        let listViewColumn = gtk::TreeViewColumn::default();
+        listViewColumn.set_title("Solution steps");
+        let listView = gtk::TreeView::with_model(&model.solutionStore);
+        listView.append_column(&listViewColumn);
         listView.selection().connect_changed(move |selection|
             send!(sender, Event::SelectionChanged(selection.clone())));
+
+        let renderer = gtk::CellRendererText::new();
+        let column = listView.column(ZEROTH_COLUMN_I32).unwrap();
+        column.pack_start(&renderer, EXPAND_IN_LAYOUT);
+        column.add_attribute(&renderer, "text", ZEROTH_COLUMN_I32);
+        column.set_resizable(true);
+
+        let scrolledWindow = gtk::ScrolledWindow::new();
+        scrolledWindow.set_vexpand(true);
+        scrolledWindow.set_child(Some(&listView));
+
+        let leftPaneBox = gtk::Box::new(gtk::Orientation::Vertical, SPACING_I32);
+        leftPaneBox.append(&parametersGrid);
+        leftPaneBox.append(&scrolledWindow);
+
+        let paned = gtk::Paned::default();
+        paned.set_position(240);
+        paned.set_start_child(&leftPaneBox);
+
+        let appWindow = gtk::ApplicationWindow::default();
+        appWindow.set_default_width(900);
+        appWindow.set_default_height(700);
+        appWindow.set_child(Some(&paned));
+
+        Self{appWindow, paned, listView}
     }
 
-    fn manual_view(&mut self, model: &AppModel, _sender: Sender<AppMsg>)
+    fn root_widget(&self) -> Self::Root
     {
+        self.appWindow.clone()
+    }
+
+    fn view(&mut self, model: &AppModel, _sender: Sender<Event>)
+    {
+        if self.listView.selection().count_selected_rows() == 0 {
+            self.listView.selection().select_iter(&self.listView.model().unwrap().iter_first().unwrap());
+        }
         self.paned.set_end_child(&gtk::Image::from_pixbuf(Some(&model.solutionSteps[model.activeStep].pixbuf)));
     }
 }
