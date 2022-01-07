@@ -1,7 +1,7 @@
 use crate::graph_utils::formatDotGraph;
 use crate::level_maker::{makeLevel, SequenceNumber, StrandNumber};
 use crate::level_solver::{solveLevel, SolutionStep, Splice};
-use crate::strand::Strand;
+use crate::strand::{NodeId, Strand};
 
 use anyhow::{bail, Context, Result};
 use gtk::gdk_pixbuf::Pixbuf;
@@ -66,11 +66,37 @@ fn makeSolutionStepDescription(spliceOpt: &Option<Splice>) -> String
                 },
                 Splice::SwapChildren{parent} => {
                     format!("Swap children of parent node {}", parent)
+                },
+                Splice::Mutate{nodes} => {
+                    makeMutateStepDescription(nodes)
                 }
             }
         },
         None => format!("Start")
     }
+}
+
+fn makeMutateStepDescription(nodes: &[NodeId]) -> String
+{
+    match nodes {
+        [] => panic!("Nodes to mutate cannot be empty"),
+        [nodeId] => format!("Mutate node {}", nodeId),
+        [_, ..] => format!("Mutate nodes {}", formatNodesIntoList(nodes))
+    }
+}
+
+fn formatNodesIntoList(nodes: &[NodeId]) -> String
+{
+    let mut output = String::new();
+    for (index, nodeId) in nodes.iter().enumerate() {
+        output.push_str(&format!("{}", nodeId));
+        match nodes.len() - 1 - index {
+            0 => (),
+            1 => output.push_str(" and "),
+            _ => output.push_str(", ")
+        }
+    }
+    output
 }
 
 fn makeStrandPixbuf(strand: &Strand) -> Result<Pixbuf>
@@ -90,6 +116,9 @@ fn makeStrandPixbuf(strand: &Strand) -> Result<Pixbuf>
 
 struct AppModel
 {
+    sequenceNumber: SequenceNumber,
+    strandNumber: StrandNumber,
+    maxStrandNumber: StrandNumber,
     solutionSteps: Vec<SolutionStepVisual>,
     activeStep: usize,
     solutionStore: gtk::ListStore,
@@ -105,6 +134,7 @@ struct SolutionStepVisual
 enum Event
 {
     SelectionChanged(gtk::TreeSelection),
+    SequenceNumberChanged(i32),
     StrandNumberChanged(i32),
 }
 
@@ -115,8 +145,13 @@ impl AppModel
     fn new() -> Self
     {
         let mut newSelf = Self{
-            solutionSteps: vec![], activeStep: 0, solutionStore: gtk::ListStore::new(&[glib::Type::STRING])};
-        newSelf.onStrandNumberChanged(1);
+            sequenceNumber: SequenceNumber(1),
+            strandNumber: StrandNumber(1),
+            maxStrandNumber: StrandNumber(7),
+            solutionSteps: vec![],
+            activeStep: 0,
+            solutionStore: gtk::ListStore::new(&[glib::Type::STRING])};
+        newSelf.onLevelChanged();
         newSelf
     }
 
@@ -129,9 +164,30 @@ impl AppModel
         self.activeStep = toRowIndex(&rows[0]);
     }
 
+    fn onSequenceNumberChanged(&mut self, value: i32)
+    {
+        self.sequenceNumber = SequenceNumber(value.try_into().unwrap());
+        self.strandNumber = StrandNumber(1);
+        self.maxStrandNumber = StrandNumber(match self.sequenceNumber.0 {
+            1 => 7,
+            _ => 1
+        });
+        self.onLevelChanged();
+    }
+
     fn onStrandNumberChanged(&mut self, value: i32)
     {
-        let level = makeLevel(SequenceNumber(1), StrandNumber(value.try_into().unwrap())).unwrap();
+        let newStrandNumber = StrandNumber(value.try_into().unwrap());
+        if self.strandNumber == newStrandNumber {
+            return;
+        }
+        self.strandNumber = newStrandNumber;
+        self.onLevelChanged();
+    }
+
+    fn onLevelChanged(&mut self)
+    {
+        let level = makeLevel(self.sequenceNumber, self.strandNumber).unwrap();
         let solution = solveLevel(level);
         let solutionVisuals = makeSolutionVisuals(solution).unwrap();
         self.solutionSteps = solutionVisuals;
@@ -156,6 +212,7 @@ impl AppUpdate for AppModel
     {
         match event {
             Event::SelectionChanged(selection) => self.onSelectionChanged(&selection),
+            Event::SequenceNumberChanged(value) => self.onSequenceNumberChanged(value),
             Event::StrandNumberChanged(value) => self.onStrandNumberChanged(value)
         };
         CONTINUE_APP
@@ -174,6 +231,7 @@ struct AppWidgets
 {
     appWindow: gtk::ApplicationWindow,
     paned: gtk::Paned,
+    strandSpinButton: gtk::SpinButton,
     listView: gtk::TreeView,
 }
 
@@ -183,13 +241,18 @@ impl Widgets<AppModel, ()> for AppWidgets
 
     fn init_view(model: &AppModel, _parent_widgets: &(), sender: Sender<Event>) -> Self
     {
-        let sequenceSpinButton = gtk::SpinButton::with_range(1.0, 1.0, 1.0);
+        let sequenceSpinButton = gtk::SpinButton::with_range(1.0, 2.0, 1.0);
         sequenceSpinButton.set_can_focus(false);
+        let sender2 = sender.clone();
+        sequenceSpinButton.connect_value_changed(move |spinButton| {
+            send!(sender2, Event::SequenceNumberChanged(spinButton.value_as_int()));
+        });
+
         let strandSpinButton = gtk::SpinButton::with_range(1.0, 7.0, 1.0);
         strandSpinButton.set_can_focus(false);
-        let sender2 = sender.clone();
+        let sender3 = sender.clone();
         strandSpinButton.connect_value_changed(move |spinButton| {
-            send!(sender2, Event::StrandNumberChanged(spinButton.value_as_int()));
+            send!(sender3, Event::StrandNumberChanged(spinButton.value_as_int()));
         });
 
         let parametersGrid = gtk::Grid::default();
@@ -230,7 +293,7 @@ impl Widgets<AppModel, ()> for AppWidgets
         appWindow.set_default_height(700);
         appWindow.set_child(Some(&paned));
 
-        Self{appWindow, paned, listView}
+        Self{appWindow, paned, strandSpinButton, listView}
     }
 
     fn root_widget(&self) -> Self::Root
@@ -240,6 +303,7 @@ impl Widgets<AppModel, ()> for AppWidgets
 
     fn view(&mut self, model: &AppModel, _sender: Sender<Event>)
     {
+        self.strandSpinButton.set_range(1.0, model.maxStrandNumber.0.into());
         if self.listView.selection().count_selected_rows() == 0 {
             self.listView.selection().select_iter(&self.listView.model().unwrap().iter_first().unwrap());
         }

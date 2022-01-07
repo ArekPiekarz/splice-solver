@@ -1,10 +1,11 @@
 use fixedbitset::FixedBitSet;
 use itertools::Itertools as _;
 use petgraph::visit::{Dfs, GraphBase, IntoNeighbors, Visitable};
+use std::collections::{BTreeMap, BTreeSet};
 
 
 pub(crate) type NodeId = usize;
-type Edge = (NodeId, NodeId);
+pub(crate) type Edge = (NodeId, NodeId);
 
 #[derive(Clone, Debug, Hash)]
 pub(crate) struct Strand
@@ -14,11 +15,16 @@ pub(crate) struct Strand
 
 impl Strand
 {
-    pub(crate) fn new(nodeCount: usize, edges: &[Edge]) -> Self
+    pub(crate) fn new(nodeCount: usize, edges: &[Edge], mutables: &[(NodeId,CellKind)]) -> Self
     {
         let mut newSelf = Self{nodes: vec![Node::default(); nodeCount]};
         for edge in edges {
-            newSelf.addParent(edge.0, edge.1);
+            newSelf.connectParentToChild(edge.0, edge.1);
+        }
+        for mutable in mutables {
+            let nodeId = mutable.0;
+            let cellKind = mutable.1;
+            newSelf.nodes[nodeId].cellKind = cellKind;
         }
         newSelf
     }
@@ -28,14 +34,24 @@ impl Strand
         0
     }
 
-    pub(crate) fn parent(&self, nodeId: NodeId) -> Option<NodeId>
+    pub(crate) fn parentId(&self, nodeId: NodeId) -> Option<NodeId>
     {
         self.nodes[nodeId].parentIdOpt
+    }
+
+    pub(crate) fn childIds(&self, nodeId: NodeId) -> &[NodeId]
+    {
+        &self.nodes[nodeId].childrenIds
     }
 
     pub(crate) fn childCount(&self, nodeId: NodeId) -> usize
     {
         self.children(nodeId).len()
+    }
+
+    pub(crate) fn cellKind(&self, nodeId: NodeId) -> CellKind
+    {
+        self.nodes[nodeId].cellKind
     }
 
     pub(crate) fn collectNodeIds(&self) -> Vec<NodeId>
@@ -49,27 +65,29 @@ impl Strand
 
     pub(crate) fn collectEdges(&self) -> Vec<Edge>
     {
-        let mut edges = vec![];
-        let mut dfs = Dfs::new(self, Self::root());
-        while let Some(nodeId) = dfs.next(self) {
-            if let Some(parentId) = self.parent(nodeId) {
-                edges.push((parentId, nodeId));
-            }
-        }
-        edges
+        self.collectEdgesFrom(Self::root())
     }
 
     pub(crate) fn changeParent(&mut self, childId: NodeId, newParentId: NodeId)
     {
         assert_ne!(self.nodes[childId].parentIdOpt, Some(newParentId));
         self.removeParent(childId);
-        self.addParent(newParentId, childId);
+        self.connectParentToChild(newParentId, childId);
     }
 
     pub(crate) fn swapChildren(&mut self, nodeId: NodeId)
     {
         assert_eq!(self.childCount(nodeId), 2);
         self.nodes[nodeId].childrenIds.swap(0, 1);
+    }
+
+    pub(crate) fn mutate(&mut self, nodeId: NodeId)
+    {
+        let node = &self.nodes[nodeId];
+        match node.cellKind {
+            CellKind::Normal => panic!("Cannot mutate a normal cell with id: {}", nodeId),
+            CellKind::Doubler => self.mutateDoubler(nodeId)
+        }
     }
 
 
@@ -85,7 +103,7 @@ impl Strand
         &self.nodes[nodeId].childrenIds
     }
 
-    fn addParent(&mut self, parentId: NodeId, childId: NodeId)
+    fn connectParentToChild(&mut self, parentId: NodeId, childId: NodeId)
     {
         assert_ne!(self.nodes[parentId].childrenIds.len(), 2);
         assert!(!self.nodes[parentId].childrenIds.contains(&childId));
@@ -101,6 +119,50 @@ impl Strand
         let oldChildIndex = self.nodes[oldParentId].childrenIds.iter().find_position(|id| **id == nodeId).unwrap().0;
         self.nodes[oldParentId].childrenIds.remove(oldChildIndex);
         self.nodes[nodeId].parentIdOpt = None;
+    }
+
+    fn collectEdgesFrom(&self, startNodeId: NodeId) -> Vec<Edge>
+    {
+        let mut edges = vec![];
+        let mut dfs = Dfs::new(self, startNodeId);
+        while let Some(nodeId) = dfs.next(self) {
+            if nodeId == startNodeId {
+                continue;
+            }
+            if let Some(parentId) = self.parentId(nodeId) {
+                edges.push((parentId, nodeId));
+            }
+        }
+        edges
+    }
+
+    fn mutateDoubler(&mut self, doublerNodeId: NodeId)
+    {
+        assert!(self.parentId(doublerNodeId).is_some());
+        assert_eq!(self.childCount(self.parentId(doublerNodeId).unwrap()), 1);
+
+        let edgesFromDoubler = self.collectEdgesFrom(doublerNodeId);
+        let nodeCountFromDoubler = edgesFromDoubler.len() + 1;
+        let originalNodeCount = self.nodes.len();
+        for _ in 0..nodeCountFromDoubler {
+            self.nodes.push(Node::default());
+        }
+        let mut oldNodeIdsSet = BTreeSet::new();
+        for edge in &edgesFromDoubler {
+            oldNodeIdsSet.insert(edge.0);
+            oldNodeIdsSet.insert(edge.1);
+        }
+        let mut newNodeIdsMap = BTreeMap::new();
+        for (index, oldNodeId) in oldNodeIdsSet.iter().enumerate() {
+            newNodeIdsMap.insert(oldNodeId, originalNodeCount + index);
+        }
+
+        self.connectParentToChild(self.parentId(doublerNodeId).unwrap(), newNodeIdsMap[&doublerNodeId]);
+        for edge in edgesFromDoubler {
+            self.connectParentToChild(newNodeIdsMap[&edge.0], newNodeIdsMap[&edge.1]);
+        }
+
+        self.nodes[doublerNodeId].cellKind = CellKind::Normal;
     }
 }
 
@@ -130,7 +192,7 @@ impl PartialEq for Strand {
 
 fn isParentCountTheSame(leftStrand: &Strand, leftNodeId: NodeId, rightStrand: &Strand, rightNodeId: NodeId) -> bool
 {
-    leftStrand.parent(leftNodeId).is_some() == rightStrand.parent(rightNodeId).is_some()
+    leftStrand.parentId(leftNodeId).is_some() == rightStrand.parentId(rightNodeId).is_some()
 }
 
 fn isChildrenCountTheSame(leftStrand: &Strand, leftNodeId: NodeId, rightStrand: &Strand, rightNodeId: NodeId) -> bool
@@ -203,6 +265,22 @@ impl Iterator for ChildNodesIterator
 #[derive(Clone, Debug, Default, Hash)]
 struct Node
 {
+    cellKind: CellKind,
     parentIdOpt: Option<NodeId>,
     childrenIds: Vec<NodeId>
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub(crate) enum CellKind
+{
+    Normal,
+    Doubler
+}
+
+impl Default for CellKind
+{
+    fn default() -> Self
+    {
+        CellKind::Normal
+    }
 }

@@ -1,5 +1,5 @@
 use crate::level_maker::{Level, SpliceCount};
-use crate::strand::{NodeId, Strand};
+use crate::strand::{CellKind, NodeId, Strand};
 
 use pathfinding::directed::dijkstra::dijkstra;
 use petgraph::visit::Dfs;
@@ -37,7 +37,7 @@ fn makeSuccessors(solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<S
 fn makeNextStatesForStrandNode(nodeId: NodeId, solutionStep: &SolutionStep) -> Vec<SolutionStep>
 {
     let strand = &solutionStep.strand;
-    let parent = match strand.parent(nodeId) {
+    let parent = match strand.parentId(nodeId) {
         Some(parent) => parent,
         None => return vec![]
     };
@@ -57,20 +57,31 @@ fn makeNextStatesForStrandNode(nodeId: NodeId, solutionStep: &SolutionStep) -> V
             Some(Splice::SwapChildren{parent}),
             newSpliceCount));
     }
+
+    if strand.cellKind(nodeId) == CellKind::Doubler {
+        result.push(SolutionStep::new(
+            makeStrandWithMutation(nodeId, strand),
+            Some(Splice::Mutate{nodes: vec![nodeId]}),
+            newSpliceCount));
+    }
+
     result
 }
 
 fn findPotentialNewParents(nodeId: NodeId, parentId: NodeId, strand: &Strand) -> Vec<NodeId>
 {
-    let mut nodeIndices = strand.collectNodeIds();
-    let mut excludedIndices = vec![nodeId];
+    let mut outputNodeIds = strand.collectNodeIds();
+    let mut excludedIndices = vec![nodeId, parentId];
     excludedIndices.extend(findChildrenRecursively(nodeId, strand));
-    if strand.childCount(parentId) == 1 {
-        excludedIndices.push(parentId);
-    }
-    nodeIndices = nodeIndices.into_iter().filter(|index| !excludedIndices.contains(index)).collect();
-    nodeIndices = nodeIndices.into_iter().filter(|index| strand.childCount(*index) < 2).collect();
-    nodeIndices
+
+    outputNodeIds = outputNodeIds.into_iter()
+        .filter(|id| !excludedIndices.contains(id))
+        .filter(|id| match strand.childIds(*id) {
+            [_, _] => false,
+            [childId] => strand.cellKind(*childId) == CellKind::Normal,
+            _ => true
+        }).collect();
+    outputNodeIds
 }
 
 fn findChildrenRecursively(nodeId: NodeId, strand: &Strand) -> Vec<NodeId>
@@ -96,6 +107,13 @@ fn makeStrandWithSwappedChildren(parentId: NodeId, strand: &Strand) -> Strand
 {
     let mut newStrand = strand.clone();
     newStrand.swapChildren(parentId);
+    newStrand
+}
+
+fn makeStrandWithMutation(nodeId: NodeId, strand: &Strand) -> Strand
+{
+    let mut newStrand = strand.clone();
+    newStrand.mutate(nodeId);
     newStrand
 }
 
@@ -127,5 +145,6 @@ type Cost = u8;
 pub(crate) enum Splice
 {
     ChangeParent{node: NodeId, oldParent: NodeId, newParent: NodeId},
-    SwapChildren{parent: NodeId}
+    SwapChildren{parent: NodeId},
+    Mutate{nodes: Vec<NodeId>}
 }
