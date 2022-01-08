@@ -170,7 +170,7 @@ impl AppModel
         self.strandNumber = StrandNumber(1);
         self.maxStrandNumber = StrandNumber(match self.sequenceNumber.0 {
             1 => 7,
-            _ => 1
+            _ => 2
         });
         self.onLevelChanged();
     }

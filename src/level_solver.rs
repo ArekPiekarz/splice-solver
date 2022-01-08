@@ -21,48 +21,46 @@ pub(crate) fn solveLevel(level: Level) -> Option<Vec<SolutionStep>>
 
 fn makeSuccessors(solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<StepAndCost>
 {
-    if solutionStep.spliceCount >= maxSplices {
-        return vec![];
-    }
-
     let mut successors = vec![];
     let strand = &solutionStep.strand;
     let mut dfs = Dfs::new(strand, Strand::root());
     while let Some(strandNode) = dfs.next(strand) {
-        successors.extend(makeNextStatesForStrandNode(strandNode, solutionStep));
+        successors.extend(makeNextStatesForStrandNode(strandNode, solutionStep, maxSplices));
     }
     successors.into_iter().map(|node| (node, 1)).collect()
 }
 
-fn makeNextStatesForStrandNode(nodeId: NodeId, solutionStep: &SolutionStep) -> Vec<SolutionStep>
+fn makeNextStatesForStrandNode(nodeId: NodeId, solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<SolutionStep>
 {
     let strand = &solutionStep.strand;
     let parent = match strand.parentId(nodeId) {
         Some(parent) => parent,
         None => return vec![]
     };
-    let newParents = findPotentialNewParents(nodeId, parent, strand);
 
     let mut result = vec![];
-    let newSpliceCount = solutionStep.spliceCount + 1;
-    for newParent in newParents {
-        result.push(SolutionStep::new(
-            makeStrandWithNewParent(nodeId, newParent, strand),
-            Some(Splice::ChangeParent{node: nodeId, oldParent: parent, newParent}),
-            newSpliceCount));
-    }
-    if strand.childCount(parent) == 2 {
-        result.push(SolutionStep::new(
-            makeStrandWithSwappedChildren(parent, strand),
-            Some(Splice::SwapChildren{parent}),
-            newSpliceCount));
+    if solutionStep.spliceCount < maxSplices {
+        let newSpliceCount = solutionStep.spliceCount + 1;
+        let newParents = findPotentialNewParents(nodeId, parent, strand);
+        for newParent in newParents {
+            result.push(SolutionStep::new(
+                makeStrandWithNewParent(nodeId, newParent, strand),
+                Some(Splice::ChangeParent { node: nodeId, oldParent: parent, newParent }),
+                newSpliceCount));
+        }
+        if strand.childCount(parent) == 2 {
+            result.push(SolutionStep::new(
+                makeStrandWithSwappedChildren(parent, strand),
+                Some(Splice::SwapChildren { parent }),
+                newSpliceCount));
+        }
     }
 
     if strand.cellKind(nodeId) == CellKind::Doubler {
         result.push(SolutionStep::new(
             makeStrandWithMutation(nodeId, strand),
             Some(Splice::Mutate{nodes: vec![nodeId]}),
-            newSpliceCount));
+            solutionStep.spliceCount));
     }
 
     result

@@ -1,7 +1,7 @@
 use fixedbitset::FixedBitSet;
 use itertools::Itertools as _;
 use petgraph::visit::{Dfs, GraphBase, IntoNeighbors, Visitable};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 
 pub(crate) type NodeId = usize;
@@ -142,18 +142,18 @@ impl Strand
         assert_eq!(self.childCount(self.parentId(doublerNodeId).unwrap()), 1);
 
         let edgesFromDoubler = self.collectEdgesFrom(doublerNodeId);
-        let nodeCountFromDoubler = edgesFromDoubler.len() + 1;
+        let additionalNodeCountAfterMutation = edgesFromDoubler.len() + 1;
         let originalNodeCount = self.nodes.len();
-        for _ in 0..nodeCountFromDoubler {
+        for _ in 0..additionalNodeCountAfterMutation {
             self.nodes.push(Node::default());
         }
-        let mut oldNodeIdsSet = BTreeSet::new();
+        let mut oldNodeIdsList = vec![];
+        oldNodeIdsList.push(doublerNodeId);
         for edge in &edgesFromDoubler {
-            oldNodeIdsSet.insert(edge.0);
-            oldNodeIdsSet.insert(edge.1);
+            oldNodeIdsList.push(edge.1);
         }
         let mut newNodeIdsMap = BTreeMap::new();
-        for (index, oldNodeId) in oldNodeIdsSet.iter().enumerate() {
+        for (index, oldNodeId) in oldNodeIdsList.iter().enumerate() {
             newNodeIdsMap.insert(oldNodeId, originalNodeCount + index);
         }
 
