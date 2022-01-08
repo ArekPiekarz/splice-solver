@@ -12,4 +12,4 @@ pathfinding = { version = "3.0.5", default-features = false }
 petgraph = { version = "0.6.0", default-features = false, features = ["stable_graph"] }
 relm4 = { version = "0.4.0-beta.3", default-features = false }
 relm4-macros = { version = "0.4.0-beta.3", default-features = false }
-tempfile = { version = "3.2.0", default-features = false }
+tempfile = { version = "3.3.0", default-features = false }
