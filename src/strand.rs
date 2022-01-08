@@ -173,7 +173,7 @@ impl PartialEq for Strand {
     fn eq(&self, other: &Self) -> bool
     {
         // We assume the indices of the nodes do not matter, what matters is how they are connected,
-        // meaning how many parents and children each node has.
+        // meaning how many parents and children each node has and what are the kinds of cells.
         let mut selfDfs = Dfs::new(&self, Self::root());
         let mut otherDfs = Dfs::new(&other, Self::root());
         while let Some(selfNodeIndex) = selfDfs.next(&self) {
@@ -182,7 +182,8 @@ impl PartialEq for Strand {
                 None => return false
             };
             if !isParentCountTheSame(self, selfNodeIndex, other, otherNodeIndex)
-                || !isChildrenCountTheSame(self, selfNodeIndex, other, otherNodeIndex) {
+                || !isChildrenCountTheSame(self, selfNodeIndex, other, otherNodeIndex)
+                || !isCellKindTheSame(self, selfNodeIndex, other, otherNodeIndex) {
                 return false;
             }
         }
@@ -198,6 +199,11 @@ fn isParentCountTheSame(leftStrand: &Strand, leftNodeId: NodeId, rightStrand: &S
 fn isChildrenCountTheSame(leftStrand: &Strand, leftNodeId: NodeId, rightStrand: &Strand, rightNodeId: NodeId) -> bool
 {
     leftStrand.childCount(leftNodeId) == rightStrand.childCount(rightNodeId)
+}
+
+fn isCellKindTheSame(leftStrand: &Strand, leftNodeId: NodeId, rightStrand: &Strand, rightNodeId: NodeId) -> bool
+{
+    leftStrand.cellKind(leftNodeId) == rightStrand.cellKind(rightNodeId)
 }
 
 impl GraphBase for Strand
