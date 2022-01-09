@@ -75,9 +75,10 @@ fn findPotentialNewParents(nodeId: NodeId, parentId: NodeId, strand: &Strand) ->
     outputNodeIds = outputNodeIds.into_iter()
         .filter(|id| !excludedIndices.contains(id))
         .filter(|id| match strand.childIds(*id) {
+            [] => true,
+            [childId] => strand.cellKind(*childId) == CellKind::Normal && strand.cellKind(nodeId) == CellKind::Normal,
             [_, _] => false,
-            [childId] => strand.cellKind(*childId) == CellKind::Normal,
-            _ => true
+            _ => panic!("Cell can't have more than two children")
         }).collect();
     outputNodeIds
 }
