@@ -27,6 +27,11 @@ fn makeSuccessors(solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<S
     while let Some(strandNode) = dfs.next(strand) {
         successors.extend(makeNextStatesForStrandNode(strandNode, solutionStep, maxSplices));
     }
+
+    if let Some(newSolutionStep) = makeSolutionStepByMutation(solutionStep) {
+        successors.push(newSolutionStep);
+    }
+
     successors.into_iter().map(|node| (node, 1)).collect()
 }
 
@@ -54,13 +59,6 @@ fn makeNextStatesForStrandNode(nodeId: NodeId, solutionStep: &SolutionStep, maxS
                 Some(Splice::SwapChildren { parent }),
                 newSpliceCount));
         }
-    }
-
-    if strand.cellKind(nodeId) == CellKind::Doubler {
-        result.push(SolutionStep::new(
-            makeStrandWithMutation(nodeId, strand),
-            Some(Splice::Mutate{nodes: vec![nodeId]}),
-            solutionStep.spliceCount));
     }
 
     result
@@ -109,11 +107,15 @@ fn makeStrandWithSwappedChildren(parentId: NodeId, strand: &Strand) -> Strand
     newStrand
 }
 
-fn makeStrandWithMutation(nodeId: NodeId, strand: &Strand) -> Strand
+fn makeSolutionStepByMutation(solutionStep: &SolutionStep) -> Option<SolutionStep>
 {
-    let mut newStrand = strand.clone();
-    newStrand.mutate(nodeId);
-    newStrand
+    let mut newStrand = solutionStep.strand.clone();
+    let mutatedNodeIds = newStrand.mutate();
+    if !mutatedNodeIds.is_empty() {
+        Some(SolutionStep::new(newStrand, Some(Splice::Mutate{nodes: mutatedNodeIds}), solutionStep.spliceCount))
+    } else {
+        None
+    }
 }
 
 fn isGoalReached(node: &SolutionStep, target: &Strand) -> bool

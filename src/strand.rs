@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 
 pub(crate) type NodeId = usize;
 pub(crate) type Edge = (NodeId, NodeId);
+type Depth = usize;
 
 #[derive(Clone, Debug, Hash)]
 pub(crate) struct Strand
@@ -81,13 +82,19 @@ impl Strand
         self.nodes[nodeId].childrenIds.swap(0, 1);
     }
 
-    pub(crate) fn mutate(&mut self, nodeId: NodeId)
+    pub(crate) fn mutate(&mut self) -> Vec<NodeId>
     {
-        let node = &self.nodes[nodeId];
-        match node.cellKind {
-            CellKind::Normal => panic!("Cannot mutate a normal cell with id: {}", nodeId),
-            CellKind::Doubler => self.mutateDoubler(nodeId)
+        let mutableCellsIds = self.findMutableSpecialCellsIds();
+        if mutableCellsIds.is_empty() {
+            return vec![];
         }
+        for cellId in &mutableCellsIds {
+            match self.cellKind(*cellId) {
+                CellKind::Doubler => self.mutateDoubler(*cellId),
+                CellKind::Normal => panic!("Cannot mutate a normal cell with id: {}", cellId)
+            }
+        }
+        mutableCellsIds
     }
 
 
@@ -136,6 +143,38 @@ impl Strand
         edges
     }
 
+    fn findMutableSpecialCellsIds(&self) -> Vec<NodeId>
+    {
+        let mut shallowestDepth = usize::MAX;
+        let mut output = vec![];
+        for cellId in self.collectNodeIds() {
+            match self.cellKind(cellId) {
+                CellKind::Normal => continue,
+                CellKind::Doubler => {
+                    let depth = self.calculateDepth(cellId);
+                    if depth < shallowestDepth {
+                        shallowestDepth = depth;
+                        output = vec![cellId];
+                    } else if depth == shallowestDepth {
+                        output.push(cellId);
+                    }
+                }
+            }
+        }
+        output
+    }
+
+    fn calculateDepth(&self, nodeId: NodeId) -> Depth
+    {
+        let mut depth = 0;
+        let mut currentId = nodeId;
+        while let Some(parentId) = self.nodes[currentId].parentIdOpt {
+            depth += 1;
+            currentId = parentId
+        }
+        depth
+    }
+
     fn mutateDoubler(&mut self, doublerNodeId: NodeId)
     {
         assert!(self.parentId(doublerNodeId).is_some());
@@ -163,6 +202,11 @@ impl Strand
         }
 
         self.nodes[doublerNodeId].cellKind = CellKind::Normal;
+        let oldMutableCellIds =
+            oldNodeIdsList.iter().dropping(1).filter(|id| self.cellKind(**id) == CellKind::Doubler).collect_vec();
+        for oldMutableCellId in oldMutableCellIds {
+            self.nodes[newNodeIdsMap[&oldMutableCellId]].cellKind = CellKind::Doubler;
+        }
     }
 }
 
