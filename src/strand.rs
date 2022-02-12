@@ -91,6 +91,7 @@ impl Strand
         for cellId in &mutableCellsIds {
             match self.cellKind(*cellId) {
                 CellKind::Doubler => self.mutateDoubler(*cellId),
+                CellKind::Extender => self.mutateExtender(*cellId),
                 CellKind::Normal => panic!("Cannot mutate a normal cell with id: {}", cellId)
             }
         }
@@ -150,7 +151,7 @@ impl Strand
         for cellId in self.collectNodeIds() {
             match self.cellKind(cellId) {
                 CellKind::Normal => continue,
-                CellKind::Doubler => {
+                CellKind::Doubler | CellKind::Extender => {
                     let depth = self.calculateDepth(cellId);
                     if depth < shallowestDepth {
                         shallowestDepth = depth;
@@ -203,9 +204,31 @@ impl Strand
 
         self.nodes[doublerNodeId].cellKind = CellKind::Normal;
         let oldMutableCellIds =
-            oldNodeIdsList.iter().dropping(1).filter(|id| self.cellKind(**id) == CellKind::Doubler).collect_vec();
+            oldNodeIdsList.iter().dropping(1).filter(|id| self.cellKind(**id) != CellKind::Normal).collect_vec();
         for oldMutableCellId in oldMutableCellIds {
-            self.nodes[newNodeIdsMap[&oldMutableCellId]].cellKind = CellKind::Doubler;
+            self.nodes[newNodeIdsMap[oldMutableCellId]].cellKind = self.cellKind(*oldMutableCellId);
+        }
+    }
+
+    fn mutateExtender(&mut self, extenderNodeId: NodeId)
+    {
+        self.nodes.push(Node::default());
+        let newNodeId = self.nodeCount() - 1;
+        let mut extenderNode = &mut self.nodes[extenderNodeId];
+        extenderNode.cellKind = CellKind::Normal;
+        let childIds = self.childIds(extenderNodeId).to_vec();
+        match childIds[..] {
+            [] => self.connectParentToChild(extenderNodeId, newNodeId),
+            [childId] => {
+                self.changeParent(childId, newNodeId);
+                self.connectParentToChild(extenderNodeId, newNodeId);
+            },
+            [childId1, childId2] => {
+                self.changeParent(childId1, newNodeId);
+                self.changeParent(childId2, newNodeId);
+                self.connectParentToChild(extenderNodeId, newNodeId);
+            },
+            _ => panic!("Cell cannot have more than 2 children")
         }
     }
 }
@@ -324,7 +347,8 @@ struct Node
 pub(crate) enum CellKind
 {
     Normal,
-    Doubler
+    Doubler,
+    Extender
 }
 
 impl Default for CellKind
