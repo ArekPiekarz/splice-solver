@@ -16,6 +16,7 @@ pub(crate) fn makeLevel(sequence: SequenceNumber, strand: StrandNumber) -> Resul
         1 => makeStrandInSequence1(strand),
         2 => makeStrandInSequence2(strand),
         3 => makeStrandInSequence3(strand),
+        4 => makeStrandInSequence4(strand),
         _ => bail!("Unsupported sequence number: {}", sequence.0)
     }
 }
@@ -125,6 +126,19 @@ fn makeStrandInSequence3(strand: StrandNumber) -> Result<Level>
             start:  StrandInfo{nodeCount: 6,  edges: vec![(0,1), (0,2), (2,3), (3,4), (4,5)], mutables: vec![(3, Doubler), (4, Doubler), (5, Extender)]},
             target: StrandInfo{nodeCount: 13, edges: vec![(0,1), (1,2), (2,3), (1,4), (4,5), (0,6), (6,7), (7,8), (7,9), (6,10), (10,11), (10,12)], mutables: vec![]},
             maxSplices: 2},
+        _ => bail!("Unsupported strand number: {}", strand.0)
+    };
+    Ok(makeLevelFrom(levelInfo))
+}
+
+fn makeStrandInSequence4(strand: StrandNumber) -> Result<Level>
+{
+    use CellKind::Eraser;
+    let levelInfo = match strand.0 {
+        1 => LevelInfo{
+            start:  StrandInfo{nodeCount: 6, edges: vec![(0,1), (1,2), (1,3), (0,4), (4,5)], mutables: vec![(2, Eraser), (4, Eraser)]},
+            target: StrandInfo{nodeCount: 3, edges: vec![(0,1), (1,2)], mutables: vec![]},
+            maxSplices: 0},
         _ => bail!("Unsupported strand number: {}", strand.0)
     };
     Ok(makeLevelFrom(levelInfo))

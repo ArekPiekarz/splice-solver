@@ -170,6 +170,7 @@ impl AppModel
         self.strandNumber = StrandNumber(1);
         self.maxStrandNumber = StrandNumber(match self.sequenceNumber.0 {
             1..=3 => 7,
+            4 => 1,
             number => panic!("Unsupported sequence number: {}", number)
         });
         self.onLevelChanged();
@@ -241,7 +242,7 @@ impl Widgets<AppModel, ()> for AppWidgets
 
     fn init_view(model: &AppModel, _parent_widgets: &(), sender: Sender<Event>) -> Self
     {
-        let sequenceSpinButton = gtk::SpinButton::with_range(1.0, 3.0, 1.0);
+        let sequenceSpinButton = gtk::SpinButton::with_range(1.0, 4.0, 1.0);
         sequenceSpinButton.set_can_focus(false);
         let sender2 = sender.clone();
         sequenceSpinButton.connect_value_changed(move |spinButton| {

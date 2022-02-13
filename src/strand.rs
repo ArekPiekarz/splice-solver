@@ -11,21 +11,21 @@ type Depth = usize;
 #[derive(Clone, Debug, Hash)]
 pub(crate) struct Strand
 {
-    nodes: Vec<Node>
+    nodes: Vec<Option<Node>>
 }
 
 impl Strand
 {
     pub(crate) fn new(nodeCount: usize, edges: &[Edge], mutables: &[(NodeId,CellKind)]) -> Self
     {
-        let mut newSelf = Self{nodes: vec![Node::default(); nodeCount]};
+        let mut newSelf = Self{nodes: vec![Some(Node::default()); nodeCount]};
         for edge in edges {
             newSelf.connectParentToChild(edge.0, edge.1);
         }
         for mutable in mutables {
             let nodeId = mutable.0;
             let cellKind = mutable.1;
-            newSelf.nodes[nodeId].cellKind = cellKind;
+            newSelf.nodeAtMut(nodeId).cellKind = cellKind;
         }
         newSelf
     }
@@ -37,31 +37,27 @@ impl Strand
 
     pub(crate) fn parentId(&self, nodeId: NodeId) -> Option<NodeId>
     {
-        self.nodes[nodeId].parentIdOpt
+        self.nodeAt(nodeId).parentIdOpt
     }
 
     pub(crate) fn childIds(&self, nodeId: NodeId) -> &[NodeId]
     {
-        &self.nodes[nodeId].childrenIds
+        &self.nodeAt(nodeId).childrenIds
     }
 
     pub(crate) fn childCount(&self, nodeId: NodeId) -> usize
     {
-        self.children(nodeId).len()
+        self.childIds(nodeId).len()
     }
 
     pub(crate) fn cellKind(&self, nodeId: NodeId) -> CellKind
     {
-        self.nodes[nodeId].cellKind
+        self.nodeAt(nodeId).cellKind
     }
 
     pub(crate) fn collectNodeIds(&self) -> Vec<NodeId>
     {
-        let mut output = vec![];
-        for i in 0..self.nodes.len() {
-            output.push(i);
-        }
-        output
+        self.collectNodeIdsFrom(Self::root())
     }
 
     pub(crate) fn collectEdges(&self) -> Vec<Edge>
@@ -71,15 +67,15 @@ impl Strand
 
     pub(crate) fn changeParent(&mut self, childId: NodeId, newParentId: NodeId)
     {
-        assert_ne!(self.nodes[childId].parentIdOpt, Some(newParentId));
-        self.removeParent(childId);
+        assert_ne!(self.parentId(childId), Some(newParentId));
+        self.disconnectParentFromChild(childId);
         self.connectParentToChild(newParentId, childId);
     }
 
     pub(crate) fn swapChildren(&mut self, nodeId: NodeId)
     {
         assert_eq!(self.childCount(nodeId), 2);
-        self.nodes[nodeId].childrenIds.swap(0, 1);
+        self.nodeAtMut(nodeId).childrenIds.swap(0, 1);
     }
 
     pub(crate) fn mutate(&mut self) -> Vec<NodeId>
@@ -90,9 +86,10 @@ impl Strand
         }
         for cellId in &mutableCellsIds {
             match self.cellKind(*cellId) {
-                CellKind::Doubler => self.mutateDoubler(*cellId),
+                CellKind::Doubler  => self.mutateDoubler(*cellId),
                 CellKind::Extender => self.mutateExtender(*cellId),
-                CellKind::Normal => panic!("Cannot mutate a normal cell with id: {}", cellId)
+                CellKind::Eraser   => self.mutateEraser(*cellId),
+                CellKind::Normal   => panic!("Cannot mutate a normal cell with id: {}", cellId)
             }
         }
         mutableCellsIds
@@ -101,32 +98,47 @@ impl Strand
 
     // private
 
+    fn nodeAt(&self, nodeId: NodeId) -> &Node
+    {
+        self.nodes[nodeId].as_ref().unwrap()
+    }
+
+    fn nodeAtMut(&mut self, nodeId: NodeId) -> &mut Node
+    {
+        self.nodes[nodeId].as_mut().unwrap()
+    }
+
     fn nodeCount(&self) -> usize
     {
         self.nodes.len()
     }
 
-    fn children(&self, nodeId: NodeId) -> &[NodeId]
-    {
-        &self.nodes[nodeId].childrenIds
-    }
-
     fn connectParentToChild(&mut self, parentId: NodeId, childId: NodeId)
     {
-        assert_ne!(self.nodes[parentId].childrenIds.len(), 2);
-        assert!(!self.nodes[parentId].childrenIds.contains(&childId));
-        assert_eq!(self.nodes[childId].parentIdOpt, None);
+        assert_ne!(self.childCount(parentId), 2);
+        assert!(!self.childIds(parentId).contains(&childId));
+        assert_eq!(self.parentId(childId), None);
 
-        self.nodes[parentId].childrenIds.push(childId);
-        self.nodes[childId].parentIdOpt = Some(parentId);
+        self.nodeAtMut(parentId).childrenIds.push(childId);
+        self.nodeAtMut(childId).parentIdOpt = Some(parentId);
     }
 
-    fn removeParent(&mut self, nodeId: NodeId)
+    fn disconnectParentFromChild(&mut self, childId: NodeId)
     {
-        let oldParentId = self.nodes[nodeId].parentIdOpt.unwrap();
-        let oldChildIndex = self.nodes[oldParentId].childrenIds.iter().find_position(|id| **id == nodeId).unwrap().0;
-        self.nodes[oldParentId].childrenIds.remove(oldChildIndex);
-        self.nodes[nodeId].parentIdOpt = None;
+        let oldParentId = self.parentId(childId).unwrap();
+        let oldChildIndex = self.childIds(oldParentId).iter().find_position(|id| **id == childId).unwrap().0;
+        self.nodeAtMut(oldParentId).childrenIds.remove(oldChildIndex);
+        self.nodeAtMut(childId).parentIdOpt = None;
+    }
+
+    fn collectNodeIdsFrom(&self, startNodeId: NodeId) -> Vec<NodeId>
+    {
+        let mut output = vec![];
+        let mut dfs = Dfs::new(self, startNodeId);
+        while let Some(nodeId) = dfs.next(self) {
+            output.push(nodeId);
+        }
+        output
     }
 
     fn collectEdgesFrom(&self, startNodeId: NodeId) -> Vec<Edge>
@@ -149,17 +161,16 @@ impl Strand
         let mut shallowestDepth = usize::MAX;
         let mut output = vec![];
         for cellId in self.collectNodeIds() {
-            match self.cellKind(cellId) {
-                CellKind::Normal => continue,
-                CellKind::Doubler | CellKind::Extender => {
-                    let depth = self.calculateDepth(cellId);
-                    if depth < shallowestDepth {
-                        shallowestDepth = depth;
-                        output = vec![cellId];
-                    } else if depth == shallowestDepth {
-                        output.push(cellId);
-                    }
-                }
+            if self.cellKind(cellId) == CellKind::Normal {
+                continue;
+            }
+
+            let depth = self.calculateDepth(cellId);
+            if depth < shallowestDepth {
+                shallowestDepth = depth;
+                output = vec![cellId];
+            } else if depth == shallowestDepth {
+                output.push(cellId);
             }
         }
         output
@@ -169,7 +180,7 @@ impl Strand
     {
         let mut depth = 0;
         let mut currentId = nodeId;
-        while let Some(parentId) = self.nodes[currentId].parentIdOpt {
+        while let Some(parentId) = self.parentId(currentId) {
             depth += 1;
             currentId = parentId
         }
@@ -185,7 +196,7 @@ impl Strand
         let additionalNodeCountAfterMutation = edgesFromDoubler.len() + 1;
         let originalNodeCount = self.nodes.len();
         for _ in 0..additionalNodeCountAfterMutation {
-            self.nodes.push(Node::default());
+            self.nodes.push(Some(Node::default()));
         }
         let mut oldNodeIdsList = vec![];
         oldNodeIdsList.push(doublerNodeId);
@@ -202,20 +213,19 @@ impl Strand
             self.connectParentToChild(newNodeIdsMap[&edge.0], newNodeIdsMap[&edge.1]);
         }
 
-        self.nodes[doublerNodeId].cellKind = CellKind::Normal;
+        self.nodeAtMut(doublerNodeId).cellKind = CellKind::Normal;
         let oldMutableCellIds =
             oldNodeIdsList.iter().dropping(1).filter(|id| self.cellKind(**id) != CellKind::Normal).collect_vec();
         for oldMutableCellId in oldMutableCellIds {
-            self.nodes[newNodeIdsMap[oldMutableCellId]].cellKind = self.cellKind(*oldMutableCellId);
+            self.nodeAtMut(newNodeIdsMap[oldMutableCellId]).cellKind = self.cellKind(*oldMutableCellId);
         }
     }
 
     fn mutateExtender(&mut self, extenderNodeId: NodeId)
     {
-        self.nodes.push(Node::default());
+        self.nodes.push(Some(Node::default()));
         let newNodeId = self.nodeCount() - 1;
-        let mut extenderNode = &mut self.nodes[extenderNodeId];
-        extenderNode.cellKind = CellKind::Normal;
+        self.nodeAtMut(extenderNodeId).cellKind = CellKind::Normal;
         let childIds = self.childIds(extenderNodeId).to_vec();
         match childIds[..] {
             [] => self.connectParentToChild(extenderNodeId, newNodeId),
@@ -229,6 +239,15 @@ impl Strand
                 self.connectParentToChild(extenderNodeId, newNodeId);
             },
             _ => panic!("Cell cannot have more than 2 children")
+        }
+    }
+
+    fn mutateEraser(&mut self, eraserNodeId: NodeId)
+    {
+        let nodeIdsToErase = self.collectNodeIdsFrom(eraserNodeId);
+        self.disconnectParentFromChild(eraserNodeId);
+        for nodeId in nodeIdsToErase {
+            self.nodes[nodeId] = None;
         }
     }
 }
@@ -299,7 +318,7 @@ impl<'a> IntoNeighbors for &'a Strand
     type Neighbors = ChildNodesIterator;
     fn neighbors(self, nodeId: NodeId) -> Self::Neighbors
     {
-        ChildNodesIterator::new(self.children(nodeId))
+        ChildNodesIterator::new(self.childIds(nodeId))
     }
 }
 
@@ -348,7 +367,8 @@ pub(crate) enum CellKind
 {
     Normal,
     Doubler,
-    Extender
+    Extender,
+    Eraser
 }
 
 impl Default for CellKind

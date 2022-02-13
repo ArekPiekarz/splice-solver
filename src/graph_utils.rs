@@ -17,6 +17,7 @@ fn formatNode(nodeId: NodeId, strand: &Strand) -> String
     match strand.cellKind(nodeId) {
         CellKind::Normal => format!("{}", nodeId),
         CellKind::Doubler => format!("\"{} (doubler)\"", nodeId),
-        CellKind::Extender => format!("\"{} (extender)\"", nodeId)
+        CellKind::Extender => format!("\"{} (extender)\"", nodeId),
+        CellKind::Eraser => format!("\"{} (eraser)\"", nodeId)
     }
 }
