@@ -24,18 +24,19 @@ fn makeSuccessors(solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<S
     let mut successors = vec![];
     let strand = &solutionStep.strand;
     let mut dfs = Dfs::new(strand, Strand::root());
-    while let Some(strandNode) = dfs.next(strand) {
-        successors.extend(makeNextStatesForStrandNode(strandNode, solutionStep, maxSplices));
+    while let Some(strandNodeId) = dfs.next(strand) {
+        successors.extend(makeSolutionStepsBySplicing(strandNodeId, solutionStep, maxSplices));
     }
 
     if let Some(newSolutionStep) = makeSolutionStepByMutation(solutionStep) {
         successors.push(newSolutionStep);
     }
 
-    successors.into_iter().map(|node| (node, 1)).collect()
+    let successors = successors.into_iter().map(|node| (node, 1)).collect();
+    successors
 }
 
-fn makeNextStatesForStrandNode(nodeId: NodeId, solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<SolutionStep>
+fn makeSolutionStepsBySplicing(nodeId: NodeId, solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<SolutionStep>
 {
     let strand = &solutionStep.strand;
     let parent = match strand.parentId(nodeId) {
@@ -74,7 +75,7 @@ fn findPotentialNewParents(nodeId: NodeId, parentId: NodeId, strand: &Strand) ->
         .filter(|id| !excludedIndices.contains(id))
         .filter(|id| match strand.childIds(*id) {
             [] => true,
-            [childId] => strand.cellKind(*childId) == CellKind::Normal && strand.cellKind(nodeId) == CellKind::Normal,
+            [childId] => strand.cellKind(*childId) != CellKind::Doubler && strand.cellKind(nodeId) != CellKind::Doubler,
             [_, _] => false,
             _ => panic!("Cell can't have more than two children")
         }).collect();
