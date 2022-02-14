@@ -1,6 +1,6 @@
 use crate::graph_utils::formatDotGraph;
 use crate::level_maker::{makeLevel, SequenceNumber, StrandNumber};
-use crate::level_solver::{solveLevel, SolutionStep, Splice};
+use crate::level_solver::{Action, solveLevel, SolutionStep};
 use crate::strand::{NodeId, Strand};
 
 use anyhow::{bail, Context, Result};
@@ -49,25 +49,25 @@ fn makeValidSolutionVisuals(solution: &[SolutionStep]) -> Result<Vec<SolutionSte
 {
     let mut output = vec![];
     for solutionStep in solution {
-        let description = makeSolutionStepDescription(&solutionStep.lastSplice);
+        let description = makeSolutionStepDescription(&solutionStep.lastAction);
         let pixbuf = makeStrandPixbuf(&solutionStep.strand)?;
         output.push(SolutionStepVisual{description, pixbuf});
     }
     Ok(output)
 }
 
-fn makeSolutionStepDescription(spliceOpt: &Option<Splice>) -> String
+fn makeSolutionStepDescription(actionOpt: &Option<Action>) -> String
 {
-    match spliceOpt {
-        Some(splice) => {
-            match splice {
-                Splice::ChangeParent{node, oldParent, newParent} => {
+    match actionOpt {
+        Some(action) => {
+            match action {
+                Action::ChangeParent{node, oldParent, newParent} => {
                     format!("Change parent of node {} from {} to {}", node, oldParent, newParent)
                 },
-                Splice::SwapChildren{parent} => {
+                Action::SwapChildren{parent} => {
                     format!("Swap children of parent node {}", parent)
                 },
-                Splice::Mutate{nodes} => {
+                Action::Mutate{nodes} => {
                     makeMutateStepDescription(nodes)
                 }
             }

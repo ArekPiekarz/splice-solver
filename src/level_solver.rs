@@ -5,12 +5,12 @@ use pathfinding::directed::dijkstra::dijkstra;
 use petgraph::visit::Dfs;
 
 
-const NO_LAST_SPLICE: Option<Splice> = None;
+const NO_LAST_ACTION: Option<Action> = None;
 const START_SPLICE_COUNT: SpliceCount = 0;
 
 pub(crate) fn solveLevel(level: Level) -> Option<Vec<SolutionStep>>
 {
-    let startStep = SolutionStep::new(level.start, NO_LAST_SPLICE, START_SPLICE_COUNT);
+    let startStep = SolutionStep::new(level.start, NO_LAST_ACTION, START_SPLICE_COUNT);
     let result = dijkstra(
         &startStep, |step| makeSuccessors(step, level.maxSplices), |step| isGoalReached(step, &level.target));
     match result {
@@ -51,13 +51,13 @@ fn makeSolutionStepsBySplicing(nodeId: NodeId, solutionStep: &SolutionStep, maxS
         for newParent in newParents {
             result.push(SolutionStep::new(
                 makeStrandWithNewParent(nodeId, newParent, strand),
-                Some(Splice::ChangeParent { node: nodeId, oldParent: parent, newParent }),
+                Some(Action::ChangeParent { node: nodeId, oldParent: parent, newParent }),
                 newSpliceCount));
         }
         if strand.childCount(parent) == 2 {
             result.push(SolutionStep::new(
                 makeStrandWithSwappedChildren(parent, strand),
-                Some(Splice::SwapChildren { parent }),
+                Some(Action::SwapChildren { parent }),
                 newSpliceCount));
         }
     }
@@ -113,7 +113,7 @@ fn makeSolutionStepByMutation(solutionStep: &SolutionStep) -> Option<SolutionSte
     let mut newStrand = solutionStep.strand.clone();
     let mutatedNodeIds = newStrand.mutate();
     if !mutatedNodeIds.is_empty() {
-        Some(SolutionStep::new(newStrand, Some(Splice::Mutate{nodes: mutatedNodeIds}), solutionStep.spliceCount))
+        Some(SolutionStep::new(newStrand, Some(Action::Mutate{nodes: mutatedNodeIds}), solutionStep.spliceCount))
     } else {
         None
     }
@@ -128,15 +128,15 @@ fn isGoalReached(node: &SolutionStep, target: &Strand) -> bool
 pub(crate) struct SolutionStep
 {
     pub strand: Strand,
-    pub lastSplice: Option<Splice>,
+    pub lastAction: Option<Action>,
     spliceCount: SpliceCount
 }
 
 impl SolutionStep
 {
-    fn new(strand: Strand, lastSplice: Option<Splice>, spliceCount: SpliceCount) -> Self
+    fn new(strand: Strand, lastAction: Option<Action>, spliceCount: SpliceCount) -> Self
     {
-        Self{strand, lastSplice, spliceCount}
+        Self{strand, lastAction, spliceCount}
     }
 }
 
@@ -144,7 +144,7 @@ type StepAndCost = (SolutionStep, Cost);
 type Cost = u8;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub(crate) enum Splice
+pub(crate) enum Action
 {
     ChangeParent{node: NodeId, oldParent: NodeId, newParent: NodeId},
     SwapChildren{parent: NodeId},
