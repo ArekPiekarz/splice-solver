@@ -151,6 +151,10 @@ fn makeStrandInSequence4(strand: StrandNumber) -> Result<Level>
             start:  StrandInfo{nodeCount: 11, edges: vec![(0,1), (1,2), (1,3), (0,4), (4,5), (5,6), (4,7), (7,8), (8,9), (7,10)], mutables: vec![(2, Eraser), (4, Eraser), (6, Eraser)]},
             target: StrandInfo{nodeCount: 6,  edges: vec![(0,1), (1,2), (2,3), (1,4), (4,5)], mutables: vec![]},
             maxSplices: 3},
+        5 => LevelInfo{
+            start:  StrandInfo{nodeCount: 12, edges: vec![(0,1), (1,2), (2,3), (2,4), (4,5), (1,6), (6,7), (7,8), (8,9), (8,10), (7,11)], mutables: vec![(6, Eraser), (8, Eraser)]},
+            target: StrandInfo{nodeCount: 10, edges: vec![(0,1), (1,2), (2,3), (3,4), (2,5), (1,6), (6,7), (6,8), (8,9)], mutables: vec![]},
+            maxSplices: 4}, // really 5, but it's angelic
         _ => bail!("Unsupported strand number: {}", strand.0)
     };
     Ok(makeLevelFrom(levelInfo))
