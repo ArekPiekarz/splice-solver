@@ -174,6 +174,7 @@ impl Strand
         edges
     }
 
+    #[allow(clippy::comparison_chain)]
     fn findMutableSpecialCellsIds(&self) -> Vec<NodeId>
     {
         let mut shallowestDepth = usize::MAX;
@@ -216,8 +217,7 @@ impl Strand
         for _ in 0..additionalNodeCountAfterMutation {
             self.nodes.push(Some(Node::default()));
         }
-        let mut oldNodeIdsList = vec![];
-        oldNodeIdsList.push(doublerNodeId);
+        let mut oldNodeIdsList = vec![doublerNodeId];
         for edge in &edgesFromDoubler {
             oldNodeIdsList.push(edge.1);
         }

@@ -8,7 +8,7 @@ pub(crate) fn formatDotGraph(strand: &Strand) -> String
     for edge in strand.collectEdges() {
         output.push_str(&format!("    {} -> {}\n", formatNode(edge.0, strand), formatNode(edge.1, strand)));
     }
-    output.push_str("}");
+    output.push('}');
     output
 }
 

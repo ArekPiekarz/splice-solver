@@ -1,3 +1,5 @@
+#![allow(clippy::enum_variant_names)]
+
 use crate::graph_utils::formatDotGraph;
 use crate::level_maker::{makeLevel, SequenceNumber, StrandNumber};
 use crate::level_solver::{Action, solveLevel, SolutionStep};
@@ -72,7 +74,7 @@ fn makeSolutionStepDescription(actionOpt: &Option<Action>) -> String
                 }
             }
         },
-        None => format!("Start")
+        None => "Start".into()
     }
 }
 

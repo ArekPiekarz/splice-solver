@@ -13,10 +13,7 @@ pub(crate) fn solveLevel(level: Level) -> Option<Vec<SolutionStep>>
     let startStep = SolutionStep::new(level.start, NO_LAST_ACTION, START_SPLICE_COUNT);
     let result = dijkstra(
         &startStep, |step| makeSuccessors(step, level.maxSplices), |step| isGoalReached(step, &level.target));
-    match result {
-        Some((nodes, _cost)) => Some(nodes),
-        None => None
-    }
+    result.map(|(nodes, _cost)| nodes)
 }
 
 fn makeSuccessors(solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<StepAndCost>
@@ -32,8 +29,7 @@ fn makeSuccessors(solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<S
         successors.push(newSolutionStep);
     }
 
-    let successors = successors.into_iter().map(|node| (node, 1)).collect();
-    successors
+    successors.into_iter().map(|node| (node, 1)).collect()
 }
 
 fn makeSolutionStepsBySplicing(nodeId: NodeId, solutionStep: &SolutionStep, maxSplices: SpliceCount) -> Vec<SolutionStep>
