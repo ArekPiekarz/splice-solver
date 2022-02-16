@@ -1,3 +1,4 @@
+use arrayvec::ArrayVec;
 use fixedbitset::FixedBitSet;
 use itertools::Itertools as _;
 use petgraph::visit::{Dfs, GraphBase, IntoNeighbors, Visitable};
@@ -347,7 +348,7 @@ struct Node
 {
     cellKind: CellKind,
     parentIdOpt: Option<NodeId>,
-    childrenIds: Vec<NodeId>
+    childrenIds: ArrayVec<NodeId, 2>
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
