@@ -67,14 +67,14 @@ impl Strand
 
     pub(crate) fn changeParent(&mut self, childId: NodeId, newParentId: NodeId)
     {
-        assert_ne!(self.parentId(childId), Some(newParentId));
+        debug_assert_ne!(self.parentId(childId), Some(newParentId));
         self.disconnectParentFromChild(childId);
         self.connectParentToChild(newParentId, childId);
     }
 
     pub(crate) fn swapChildren(&mut self, nodeId: NodeId)
     {
-        assert_eq!(self.childCount(nodeId), 2);
+        debug_assert_eq!(self.childCount(nodeId), 2);
         self.nodeAtMut(nodeId).childrenIds.swap(0, 1);
     }
 
@@ -133,9 +133,9 @@ impl Strand
 
     fn connectParentToChild(&mut self, parentId: NodeId, childId: NodeId)
     {
-        assert_ne!(self.childCount(parentId), 2);
-        assert!(!self.childIds(parentId).contains(&childId));
-        assert_eq!(self.parentId(childId), None);
+        debug_assert_ne!(self.childCount(parentId), 2);
+        debug_assert!(!self.childIds(parentId).contains(&childId));
+        debug_assert_eq!(self.parentId(childId), None);
 
         self.nodeAtMut(parentId).childrenIds.push(childId);
         self.nodeAtMut(childId).parentIdOpt = Some(parentId);
@@ -207,8 +207,8 @@ impl Strand
 
     fn mutateDoubler(&mut self, doublerNodeId: NodeId)
     {
-        assert!(self.parentId(doublerNodeId).is_some());
-        assert_eq!(self.childCount(self.parentId(doublerNodeId).unwrap()), 1);
+        debug_assert!(self.parentId(doublerNodeId).is_some());
+        debug_assert_eq!(self.childCount(self.parentId(doublerNodeId).unwrap()), 1);
 
         let edgesFromDoubler = self.collectEdgesFrom(doublerNodeId);
         let additionalNodeCountAfterMutation = edgesFromDoubler.len() + 1;
