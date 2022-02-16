@@ -8,7 +8,7 @@ pub(crate) type NodeId = usize;
 pub(crate) type Edge = (NodeId, NodeId);
 type Depth = usize;
 
-#[derive(Clone, Debug, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub(crate) struct Strand
 {
     nodes: Vec<Option<Node>>
@@ -95,6 +95,24 @@ impl Strand
         mutableCellsIds
     }
 
+    pub fn isEqualOnSurface(&self, other: &Self) -> bool
+    {
+        // We assume the indices of the nodes do not matter, what matters is how they are connected,
+        // meaning how many children each node has and what are the kinds of cells.
+        let mut selfDfs = Dfs::new(self, Self::root());
+        let mut otherDfs = Dfs::new(&other, Self::root());
+        while let Some(selfNodeIndex) = selfDfs.next(&self) {
+            let otherNodeIndex = match otherDfs.next(&other) {
+                Some(index) => index,
+                None => return false
+            };
+            if !isChildrenCountTheSame(self, selfNodeIndex, other, otherNodeIndex)
+                || !isCellKindTheSame(self, selfNodeIndex, other, otherNodeIndex) {
+                return false;
+            }
+        }
+        otherDfs.next(&other) == None
+    }
 
     // private
 
@@ -252,36 +270,6 @@ impl Strand
     }
 }
 
-impl Eq for Strand
-{}
-
-impl PartialEq for Strand {
-    fn eq(&self, other: &Self) -> bool
-    {
-        // We assume the indices of the nodes do not matter, what matters is how they are connected,
-        // meaning how many parents and children each node has and what are the kinds of cells.
-        let mut selfDfs = Dfs::new(&self, Self::root());
-        let mut otherDfs = Dfs::new(&other, Self::root());
-        while let Some(selfNodeIndex) = selfDfs.next(&self) {
-            let otherNodeIndex = match otherDfs.next(&other) {
-                Some(index) => index,
-                None => return false
-            };
-            if !isParentCountTheSame(self, selfNodeIndex, other, otherNodeIndex)
-                || !isChildrenCountTheSame(self, selfNodeIndex, other, otherNodeIndex)
-                || !isCellKindTheSame(self, selfNodeIndex, other, otherNodeIndex) {
-                return false;
-            }
-        }
-        otherDfs.next(&other) == None
-    }
-}
-
-fn isParentCountTheSame(leftStrand: &Strand, leftNodeId: NodeId, rightStrand: &Strand, rightNodeId: NodeId) -> bool
-{
-    leftStrand.parentId(leftNodeId).is_some() == rightStrand.parentId(rightNodeId).is_some()
-}
-
 fn isChildrenCountTheSame(leftStrand: &Strand, leftNodeId: NodeId, rightStrand: &Strand, rightNodeId: NodeId) -> bool
 {
     leftStrand.childCount(leftNodeId) == rightStrand.childCount(rightNodeId)
@@ -354,7 +342,7 @@ impl Iterator for ChildNodesIterator
     }
 }
 
-#[derive(Clone, Debug, Default, Hash)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
 struct Node
 {
     cellKind: CellKind,

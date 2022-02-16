@@ -121,7 +121,7 @@ fn makeSolutionStepByMutation(solutionStep: &SolutionStep) -> Option<SolutionSte
 
 fn isGoalReached(node: &SolutionStep, target: &Strand) -> bool
 {
-    node.strand == *target
+    node.strand.isEqualOnSurface(target)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
