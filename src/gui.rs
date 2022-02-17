@@ -306,6 +306,7 @@ impl Widgets<AppModel, ()> for AppWidgets
     fn view(&mut self, model: &AppModel, _sender: Sender<Event>)
     {
         self.strandSpinButton.set_range(1.0, model.maxStrandNumber.0.into());
+        self.strandSpinButton.set_value(model.strandNumber.0.into());
         if self.listView.selection().count_selected_rows() == 0 {
             self.listView.selection().select_iter(&self.listView.model().unwrap().iter_first().unwrap());
         }
