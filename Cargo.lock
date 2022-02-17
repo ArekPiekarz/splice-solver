@@ -745,6 +745,7 @@ dependencies = [
  "petgraph",
  "relm4",
  "tempfile",
+ "to_trait",
 ]
 
 [[package]]
@@ -804,6 +805,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "to_trait"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81260b398bc68b8d413bd06b8030eb9e96f5007980b9cc763527942a442d5b16"
 
 [[package]]
 name = "toml"

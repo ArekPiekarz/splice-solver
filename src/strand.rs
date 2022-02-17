@@ -3,11 +3,12 @@ use fixedbitset::FixedBitSet;
 use itertools::Itertools as _;
 use petgraph::visit::{Dfs, GraphBase, IntoNeighbors, Visitable};
 use std::collections::BTreeMap;
+use to_trait::To;
 
-
-pub(crate) type NodeId = usize;
+pub(crate) type NodeId = u8;
 pub(crate) type Edge = (NodeId, NodeId);
 type Depth = usize;
+
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub(crate) struct Strand
@@ -119,12 +120,12 @@ impl Strand
 
     fn nodeAt(&self, nodeId: NodeId) -> &Node
     {
-        self.nodes[nodeId].as_ref().unwrap()
+        self.nodes[nodeId.to::<usize>()].as_ref().unwrap()
     }
 
     fn nodeAtMut(&mut self, nodeId: NodeId) -> &mut Node
     {
-        self.nodes[nodeId].as_mut().unwrap()
+        self.nodes[nodeId.to::<usize>()].as_mut().unwrap()
     }
 
     fn nodeCount(&self) -> usize
@@ -152,7 +153,7 @@ impl Strand
 
     fn collectNodeIdsFrom(&self, startNodeId: NodeId) -> Vec<NodeId>
     {
-        let mut output = vec![];
+        let mut output = Vec::with_capacity(self.nodeCount());
         let mut dfs = Dfs::new(self, startNodeId);
         while let Some(nodeId) = dfs.next(self) {
             output.push(nodeId);
@@ -224,7 +225,7 @@ impl Strand
         }
         let mut newNodeIdsMap = BTreeMap::new();
         for (index, oldNodeId) in oldNodeIdsList.iter().enumerate() {
-            newNodeIdsMap.insert(oldNodeId, originalNodeCount + index);
+            newNodeIdsMap.insert(oldNodeId, (originalNodeCount + index).try_to::<NodeId>().unwrap());
         }
 
         self.connectParentToChild(self.parentId(doublerNodeId).unwrap(), newNodeIdsMap[&doublerNodeId]);
@@ -243,7 +244,7 @@ impl Strand
     fn mutateExtender(&mut self, extenderNodeId: NodeId)
     {
         self.nodes.push(Some(Node::default()));
-        let newNodeId = self.nodeCount() - 1;
+        let newNodeId = (self.nodeCount() - 1).try_to::<NodeId>().unwrap();
         self.nodeAtMut(extenderNodeId).cellKind = CellKind::Normal;
         let childIds = self.childIds(extenderNodeId).to_vec();
         match childIds[..] {
@@ -266,7 +267,7 @@ impl Strand
         let nodeIdsToErase = self.collectNodeIdsFrom(eraserNodeId);
         self.disconnectParentFromChild(eraserNodeId);
         for nodeId in nodeIdsToErase {
-            self.nodes[nodeId] = None;
+            self.nodes[nodeId.to::<usize>()] = None;
         }
     }
 }
