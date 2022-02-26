@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = { version = "1.0.53", default-features = false, features = ["std"] }
+anyhow = { version = "1.0.55", default-features = false, features = ["std"] }
 arrayvec = { version = "0.7.2", default-features = false }
 fixedbitset = { version = "0.4.1", default-features = false }
 itertools = { version = "0.10.3", default-features = false }
