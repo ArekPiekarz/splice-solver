@@ -17,6 +17,7 @@ pub(crate) fn makeLevel(sequence: SequenceNumber, strand: StrandNumber) -> Resul
         2 => makeStrandInSequence2(strand),
         3 => makeStrandInSequence3(strand),
         4 => makeStrandInSequence4(strand),
+        5 => makeStrandInSequence5(strand),
         _ => bail!("Unsupported sequence number: {}", sequence.0)
     }
 }
@@ -163,6 +164,19 @@ fn makeStrandInSequence4(strand: StrandNumber) -> Result<Level>
             start:  StrandInfo{nodeCount: 16, edges: vec![(0,1), (1,2), (2,3), (3,4), (4,5), (3,6), (2,7), (7,8), (1,9), (9,10), (10,11), (9,12), (12,13), (12,14), (14,15)], mutables: vec![(2, Eraser), (12, Eraser)]},
             target: StrandInfo{nodeCount: 11, edges: vec![(0,1), (1,2), (2,3), (3,4), (2,5), (0,6), (6,7), (7,8), (7,9), (9,10)], mutables: vec![]},
             maxSplices: 3}, // really 4, but it's angelic
+        _ => bail!("Unsupported strand number: {}", strand.0)
+    };
+    Ok(makeLevelFrom(levelInfo))
+}
+
+fn makeStrandInSequence5(strand: StrandNumber) -> Result<Level>
+{
+    use CellKind::{Doubler, Eraser, Extender};
+    let levelInfo = match strand.0 {
+        1 => LevelInfo{
+            start:  StrandInfo{nodeCount: 7, edges: vec![(0,1), (1,2), (2,3), (2,4), (0,5), (5,6)], mutables: vec![(2, Doubler), (3, Extender), (4, Eraser)]},
+            target: StrandInfo{nodeCount: 7, edges: vec![(0,1), (1,2), (1,3), (0,4), (4,5), (4,6)], mutables: vec![]},
+            maxSplices: 2}, // really 3, but it's angelic
         _ => bail!("Unsupported strand number: {}", strand.0)
     };
     Ok(makeLevelFrom(levelInfo))
