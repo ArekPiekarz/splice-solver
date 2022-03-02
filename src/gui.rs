@@ -172,7 +172,7 @@ impl AppModel
         self.strandNumber = StrandNumber(1);
         self.maxStrandNumber = StrandNumber(match self.sequenceNumber.0 {
             1..=4 => 7,
-            5 => 1,
+            5 => 2,
             number => panic!("Unsupported sequence number: {}", number)
         });
         self.onLevelChanged();
