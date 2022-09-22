@@ -289,7 +289,7 @@ impl Widgets<AppModel, ()> for AppWidgets
 
         let paned = gtk::Paned::default();
         paned.set_position(240);
-        paned.set_start_child(&leftPaneBox);
+        paned.set_start_child(Some(&leftPaneBox));
 
         let appWindow = gtk::ApplicationWindow::default();
         appWindow.set_default_width(900);
@@ -317,6 +317,6 @@ impl Widgets<AppModel, ()> for AppWidgets
         if self.listView.selection().count_selected_rows() == 0 {
             self.listView.selection().select_iter(&self.listView.model().unwrap().iter_first().unwrap());
         }
-        self.paned.set_end_child(&gtk::Image::from_pixbuf(Some(&model.solutionSteps[model.activeStep].pixbuf)));
+        self.paned.set_end_child(Some(&gtk::Image::from_pixbuf(Some(&model.solutionSteps[model.activeStep].pixbuf))));
     }
 }
