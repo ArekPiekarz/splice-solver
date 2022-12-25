@@ -105,7 +105,7 @@ fn makeStrandPixbuf(strand: &Strand) -> Result<Pixbuf>
 {
     let dotGraph = formatDotGraph(strand);
     let tempDir = tempdir()?;
-    let dotGraphFile = NamedTempFile::new_in(&tempDir.path())?;
+    let dotGraphFile = NamedTempFile::new_in(tempDir.path())?;
     let dotGraphFilePathStr = dotGraphFile.path().to_str().context("None")?;
     write(dotGraphFile.path(), dotGraph)?;
 

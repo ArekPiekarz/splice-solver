@@ -102,9 +102,9 @@ impl Strand
         // We assume the indices of the nodes do not matter, what matters is how they are connected,
         // meaning how many children each node has and what are the kinds of cells.
         let mut selfDfs = Dfs::new(self, Self::root());
-        let mut otherDfs = Dfs::new(&other, Self::root());
-        while let Some(selfNodeIndex) = selfDfs.next(&self) {
-            let otherNodeIndex = match otherDfs.next(&other) {
+        let mut otherDfs = Dfs::new(other, Self::root());
+        while let Some(selfNodeIndex) = selfDfs.next(self) {
+            let otherNodeIndex = match otherDfs.next(other) {
                 Some(index) => index,
                 None => return false
             };
@@ -113,7 +113,7 @@ impl Strand
                 return false;
             }
         }
-        otherDfs.next(&other) == None
+        otherDfs.next(other).is_none()
     }
 
     // private

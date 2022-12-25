@@ -81,8 +81,8 @@ fn findPotentialNewParents(nodeId: NodeId, parentId: NodeId, strand: &Strand) ->
 fn findChildrenRecursively(nodeId: NodeId, strand: &Strand) -> Vec<NodeId>
 {
     let mut result = vec![];
-    let mut dfs = Dfs::new(&strand, nodeId);
-    while let Some(childId) = dfs.next(&strand) {
+    let mut dfs = Dfs::new(strand, nodeId);
+    while let Some(childId) = dfs.next(strand) {
         if childId != nodeId {
             result.push(childId);
         }
