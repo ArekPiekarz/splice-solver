@@ -8,14 +8,13 @@ mod strand;
 
 use crate::gui::makeGui;
 
-use anyhow::Result;
 use mimalloc::MiMalloc;
 
 #[global_allocator]
 static ALLOCATOR: MiMalloc = MiMalloc;
 
 
-fn main() -> Result<()>
+fn main()
 {
     makeGui()
 }

@@ -9,13 +9,13 @@ use anyhow::{bail, Context, Result};
 use gtk::gdk_pixbuf::Pixbuf;
 use gtk::glib;
 use gtk::prelude::{BoxExt, GridExt, GtkWindowExt, ToValue, TreeModelExt, TreeViewExt, WidgetExt};
-use relm4::{gtk, send, AppUpdate, Model, RelmApp, Sender, Widgets};
+use relm4::gtk;
 use std::fs::write;
 use std::process::Command;
 use tempfile::{NamedTempFile, tempdir};
+use to_trait::To;
 
 
-const CONTINUE_APP: bool = true;
 const EXPAND_IN_LAYOUT : bool = true;
 const PRESERVE_ASPECT_RATIO: bool = true;
 const SPACING_I32: i32 = 5;
@@ -23,13 +23,10 @@ const SPACING_U32: u32 = 5;
 const ZEROTH_COLUMN_I32: i32 = 0;
 const ZEROTH_COLUMN_U32: u32 = 0;
 
-pub(crate) fn makeGui() -> Result<()>
+pub(crate) fn makeGui()
 {
-    gtk::init()?;
-    let model = AppModel::new();
-    let relm = RelmApp::new(model);
-    relm.run();
-    Ok(())
+    let app = relm4::RelmApp::new("global.splice-solver");
+    app.run::<AppModel>(());
 }
 
 fn makeSolutionVisuals(solutionOpt: Option<Vec<SolutionStep>>) -> Result<Vec<SolutionStepVisual>>
@@ -133,14 +130,13 @@ struct SolutionStepVisual
     pixbuf: Pixbuf,
 }
 
+#[derive(Debug)]
 enum Event
 {
     SelectionChanged(gtk::TreeSelection),
     SequenceNumberChanged(i32),
     StrandNumberChanged(i32),
 }
-
-type AppComponents = ();
 
 impl AppModel
 {
@@ -202,60 +198,45 @@ impl AppModel
     }
 }
 
-impl Model for AppModel
-{
-    type Msg = Event;
-    type Widgets = AppWidgets;
-    type Components = AppComponents;
-}
-
-impl AppUpdate for AppModel
-{
-    fn update(&mut self, event: Event, _components: &AppComponents, _sender: Sender<Event>) -> bool
-    {
-        match event {
-            Event::SelectionChanged(selection) => self.onSelectionChanged(&selection),
-            Event::SequenceNumberChanged(value) => self.onSequenceNumberChanged(value),
-            Event::StrandNumberChanged(value) => self.onStrandNumberChanged(value)
-        };
-        CONTINUE_APP
-    }
-}
-
-#[must_use]
-pub fn toRowIndex(rowPath: &gtk::TreePath) -> RowIndex
-{
-    rowPath.indices()[0].try_into().unwrap()
-}
-
-type RowIndex = usize;
-
 struct AppWidgets
 {
-    appWindow: gtk::ApplicationWindow,
     paned: gtk::Paned,
     strandSpinButton: gtk::SpinButton,
     listView: gtk::TreeView,
 }
 
-impl Widgets<AppModel, ()> for AppWidgets
+impl relm4::SimpleComponent for AppModel
 {
+    type Input = Event;
+    type Output = ();
+    type Init = ();
     type Root = gtk::ApplicationWindow;
+    type Widgets = AppWidgets;
 
-    fn init_view(model: &AppModel, _parent_widgets: &(), sender: Sender<Event>) -> Self
+    fn init_root() -> Self::Root
     {
+        let appWindow = gtk::ApplicationWindow::default();
+        appWindow.set_default_width(900);
+        appWindow.set_default_height(700);
+        appWindow
+    }
+
+    fn init(_: Self::Init, appWindow: &Self::Root, sender: relm4::ComponentSender<Self>) -> relm4::ComponentParts<Self>
+    {
+        let model = AppModel::new();
+
         let sequenceSpinButton = gtk::SpinButton::with_range(1.0, 5.0, 1.0);
         sequenceSpinButton.set_can_focus(false);
         let sender2 = sender.clone();
         sequenceSpinButton.connect_value_changed(move |spinButton| {
-            send!(sender2, Event::SequenceNumberChanged(spinButton.value_as_int()));
+            sender2.input(Event::SequenceNumberChanged(spinButton.value_as_int()));
         });
 
         let strandSpinButton = gtk::SpinButton::with_range(1.0, 7.0, 1.0);
         strandSpinButton.set_can_focus(false);
         let sender3 = sender.clone();
         strandSpinButton.connect_value_changed(move |spinButton| {
-            send!(sender3, Event::StrandNumberChanged(spinButton.value_as_int()));
+            sender3.input(Event::StrandNumberChanged(spinButton.value_as_int()));
         });
 
         let parametersGrid = gtk::Grid::default();
@@ -271,7 +252,7 @@ impl Widgets<AppModel, ()> for AppWidgets
         let listView = gtk::TreeView::with_model(&model.solutionStore);
         listView.append_column(&listViewColumn);
         listView.selection().connect_changed(move |selection|
-            send!(sender, Event::SelectionChanged(selection.clone())));
+            sender.input(Event::SelectionChanged(selection.clone())));
 
         let renderer = gtk::CellRendererText::new();
         let column = listView.column(ZEROTH_COLUMN_I32).unwrap();
@@ -291,32 +272,42 @@ impl Widgets<AppModel, ()> for AppWidgets
         paned.set_position(240);
         paned.set_start_child(Some(&leftPaneBox));
 
-        let appWindow = gtk::ApplicationWindow::default();
-        appWindow.set_default_width(900);
-        appWindow.set_default_height(700);
         appWindow.set_child(Some(&paned));
 
-        Self{appWindow, paned, strandSpinButton, listView}
+        let widgets = AppWidgets{paned, strandSpinButton, listView};
+        relm4::ComponentParts{model, widgets}
     }
 
-    fn root_widget(&self) -> Self::Root
+    fn update(&mut self, event: Self::Input, _sender: relm4::ComponentSender<Self>)
     {
-        self.appWindow.clone()
+        match event {
+            Event::SelectionChanged(selection) => self.onSelectionChanged(&selection),
+            Event::SequenceNumberChanged(value) => self.onSequenceNumberChanged(value),
+            Event::StrandNumberChanged(value) => self.onStrandNumberChanged(value)
+        };
     }
 
-    fn view(&mut self, model: &AppModel, _sender: Sender<Event>)
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: relm4::ComponentSender<Self>)
     {
-        if self.strandSpinButton.value_as_int() != model.strandNumber.0.into() {
-            self.strandSpinButton.set_value(model.strandNumber.0.into());
+        if widgets.strandSpinButton.value_as_int() != self.strandNumber.0.to::<i32>() {
+            widgets.strandSpinButton.set_value(self.strandNumber.0.into());
         }
 
-        if self.strandSpinButton.range().1 != model.maxStrandNumber.0.into() {
-            self.strandSpinButton.set_range(1.0, model.maxStrandNumber.0.into());
+        if widgets.strandSpinButton.range().1 != self.maxStrandNumber.0.into() {
+            widgets.strandSpinButton.set_range(1.0, self.maxStrandNumber.0.into());
         }
 
-        if self.listView.selection().count_selected_rows() == 0 {
-            self.listView.selection().select_iter(&self.listView.model().unwrap().iter_first().unwrap());
+        if widgets.listView.selection().count_selected_rows() == 0 {
+            widgets.listView.selection().select_iter(&widgets.listView.model().unwrap().iter_first().unwrap());
         }
-        self.paned.set_end_child(Some(&gtk::Image::from_pixbuf(Some(&model.solutionSteps[model.activeStep].pixbuf))));
+        widgets.paned.set_end_child(Some(&gtk::Image::from_pixbuf(Some(&self.solutionSteps[self.activeStep].pixbuf))));
     }
 }
+
+#[must_use]
+pub fn toRowIndex(rowPath: &gtk::TreePath) -> RowIndex
+{
+    rowPath.indices()[0].try_into().unwrap()
+}
+
+type RowIndex = usize;
