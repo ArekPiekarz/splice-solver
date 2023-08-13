@@ -11,8 +11,8 @@ itertools = { version = "0.11.0", default-features = false, features = ["use_std
 mimalloc = { version = "0.1.37", default-features = false }
 pathfinding = { version = "4.3.1", default-features = false }
 petgraph = { version = "0.6.3", default-features = false, features = ["stable_graph"] }
-relm4 = { version = "0.6.0", default-features = false, features = ["macros"] }
-tempfile = { version = "3.7.0", default-features = false }
+relm4 = { version = "0.6.1", default-features = false }
+tempfile = { version = "3.7.1", default-features = false }
 to_trait = {version = "0.1.1", default-features = false }
 
 [profile.release]
